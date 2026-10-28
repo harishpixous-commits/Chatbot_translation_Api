@@ -8,7 +8,7 @@ Manager (prod), referenced by an `*ApiKeyConfigKey` pointer.
 
 | Key | Example | Meaning |
 |---|---|---|
-| `ChatProvider` | `KnowledgeBase` / `Echo` / `OpenAiCompatible` | Chat adapter. Swapped per environment, no code change |
+| `ChatProvider` | `KnowledgeBase` / `Echo` / `OpenAiCompatible` / `MultiLLM` | Chat adapter. `OpenAiCompatible` = one local (llama.cpp/Ollama) or hosted endpoint; `MultiLLM` = API-key vendor chain from the ⚙ panel. Swapped per environment, no code change |
 | `TranslationProvider` | `Echo` / `AzureTranslator` / `LibreTranslate` | Translation adapter |
 | `OpenAiCompatible:Endpoint` | `https://api.openai.com/v1` | Azure: `{resource}.openai.azure.com/openai/v1`; local: `http://localhost:11434/v1` |
 | `OpenAiCompatible:Model` | `gpt-4o-mini` | Model / deployment, swappable per environment |

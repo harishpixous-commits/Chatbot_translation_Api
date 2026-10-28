@@ -12,7 +12,30 @@ per-request Provider field → runtime selection (POST /api/ai/selection) → co
 |---|---|---|---|
 | `Echo` | None (in-process) | Never | Dev, tests, offline fallback |
 | `KnowledgeBase` | `AiSuite:KnowledgeBase` entries | Never | Instant on-brand FAQ answers, zero cost; front layer before real AI |
-| `OpenAiCompatible` | Any `/chat/completions` HTTP endpoint | Via `ApiKeyConfigKey` (or `RequireApiKey: false`) | OpenAI, Azure OpenAI (`…/openai/v1`), Ollama, LM Studio, vLLM |
+| `OpenAiCompatible` | Any `/chat/completions` HTTP endpoint | Via `ApiKeyConfigKey` (or `RequireApiKey: false`) | OpenAI, Azure OpenAI (`…/openai/v1`), Ollama, LM Studio, vLLM, llama.cpp |
+| `MultiLLM` | Any mix of vendor presets (below) | Per-key, saved in the ⚙ Settings panel | Hosted vendors with operator-managed keys + fallback chain |
+
+## Two chat modes (both ship in the box)
+
+**1. Local, self-hosted model (default posture — no external AI calls).**
+Point `OpenAiCompatible` at a local server: the bundled llama.cpp chat sidecar
+(`chat-sidecar/`, pinned Qwen3-4B GGUF) or Ollama/LM Studio/vLLM. Set
+`OpenAiCompatible:RequireApiKey` to `false`; no key anywhere.
+
+**2. Hosted vendor with an API key (opt-in configuration).**
+Same code path, key supplied by the operator — never in source, never sent to
+the browser:
+- Single endpoint: `OpenAiCompatible:Endpoint` + `Model`, key referenced by
+  `OpenAiCompatible:ApiKeyConfigKey` (User Secrets / env / Key Vault).
+- Multi-vendor with fallback: `ChatProvider: "MultiLLM"`; keys saved in the
+  password-gated ⚙ Settings panel against a vendor preset — OpenAI, Anthropic,
+  Gemini, DeepSeek, Groq, Mistral, OpenRouter, Ollama (local), or Custom
+  OpenAI-compatible. API responses mask keys; a 401/403/429 cools that key and
+  tries the next; ambiguous failures (timeout/5xx) do NOT silently fail over
+  (possible duplicate billing) unless the operator opts in.
+
+Switching between the two modes is configuration only — no code change, and
+the default stays the local model unless an operator selects otherwise.
 
 ## Translation providers
 
