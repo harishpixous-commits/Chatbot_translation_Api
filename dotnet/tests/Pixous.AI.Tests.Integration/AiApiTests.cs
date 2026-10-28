@@ -101,7 +101,7 @@ public class AiApiTests : IClassFixture<AiApiTests.Factory>
     public async Task TranslateBatch_ReturnsAll()
     {
         var res = await _client.PostAsJsonAsync("/api/ai/translation/batch",
-            new { texts = new[] { "hi", "bye" }, targetLanguage = "es" });
+            new { texts = new[] { "hi", "bye" }, targetLanguage = "ta" });
         using var doc = await EnvelopeAsync(res);
         Assert.Equal(2, doc.RootElement.GetProperty("data").GetProperty("translatedTexts").GetArrayLength());
     }
