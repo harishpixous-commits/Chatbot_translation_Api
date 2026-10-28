@@ -11,13 +11,16 @@ concurrency:
 jobs:
   verify:
     runs-on: windows-latest   # private-repo standard: 2 vCPU / 8 GB (documented)
-    timeout-minutes: 45       # hard runtime bound: 45 x $0.010 = $0.45 worst case
+    timeout-minutes: 45       # hard runtime bound (public repo: standard runners free)
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          # Unit tests multi-target net8.0+net10.0: BOTH runtimes required.
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: .NET unit + integration suites
         working-directory: dotnet
