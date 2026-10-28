@@ -147,8 +147,16 @@ jobs:
           # is reviewed against the whole answer before calling it a quality finding.
           $probes = @(
             @{ q = 'Answer in one word: what is the capital of India?'; any = @('delhi') },
-            @{ q = 'தமிழில் பதில் சொல்: இந்தியாவின் தலைநகர் எது?'; any = @('தில்லி','டெல்லி','நியூடெல்லி') }
+            @{ q = 'தமிழில் பதில் சொல்: இந்தியாவின் தலைநகர் எது?'; any = @('தில்லி','டெல்லி','நியூடெல்லி') },
+            @{ q = 'தமிழில் பதில் சொல்: ஜப்பானின் தலைநகர் எது?'; any = @('டோக்கியோ','தோக்கியோ') },
+            @{ q = 'हिंदी में उत्तर दें: जापान की राजधानी क्या है?'; any = @('टोक्यो') },
+            @{ q = 'తెలుగులో సమాధానం ఇవ్వండి: జపాన్ రాజధాని ఏమిటి?'; any = @('టోక్యో') },
+            @{ q = 'മലയാളത്തിൽ ഉത്തരം പറയൂ: ജപ്പാന്റെ തലസ്ഥാനം ഏതാണ്?'; any = @('ടോക്കിയോ') },
+            @{ q = 'ಕನ್ನಡದಲ್ಲಿ ಉತ್ತರಿಸಿ: ಜಪಾನ್‌ನ ರಾಜಧಾನಿ ಯಾವುದು?'; any = @('ಟೋಕಿಯೋ','ಟೋಕಿಯೊ') }
           )
+          # Run ALL probes even after a failure: one bad answer must not hide the
+          # rest of the battery. The step still fails red if any probe failed.
+          $probeFailures = @()
           foreach ($p in $probes) {
             $pb = @{ message = $p.q } | ConvertTo-Json
             $pr = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5199/api/ai/chat -ContentType 'application/json; charset=utf-8' -Body $pb -TimeoutSec 600
@@ -157,7 +165,13 @@ jobs:
             $hit = $false
             foreach ($e in $p.any) { if ($pr.data.reply -match [regex]::Escape($e)) { $hit = $true; break } }
             if (-not $pr.success -or -not $hit) {
-              if (Test-Path api.err) { Get-Content api.err -Tail 30 }
-              throw "factual probe failed: reply contained none of [$($p.any -join ', ')]"
+              $probeFailures += $p.q
+              Write-Output "PROBE RESULT: FAIL (reply contained none of [$($p.any -join ', ')])"
+            } else {
+              Write-Output "PROBE RESULT: PASS"
             }
+          }
+          if ($probeFailures.Count -gt 0) {
+            if (Test-Path api.err) { Get-Content api.err -Tail 30 }
+            throw "factual probes failed ($($probeFailures.Count) of $($probes.Count)): $($probeFailures -join ' | ')"
           }
