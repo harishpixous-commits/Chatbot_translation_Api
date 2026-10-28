@@ -45,6 +45,8 @@ public sealed class AiSuiteOptions
             if (string.IsNullOrWhiteSpace(OpenAiCompatible.Endpoint))
                 yield return "OpenAiCompatible:Endpoint must be set when ChatProvider is OpenAiCompatible.";
         }
+        if (OpenAiCompatible.TimeoutSeconds is < 1)
+            yield return "OpenAiCompatible:TimeoutSeconds must be >= 1 when set.";
         if (TranslationProvider.Equals("AzureTranslator", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(AzureTranslator.Endpoint))
@@ -84,6 +86,14 @@ public sealed class OpenAiCompatibleOptions
     /// <summary>Config path holding the secret — NOT the secret itself. Default: "AiSuite:ApiKeys:Chat".</summary>
     public string ApiKeyConfigKey { get; set; } = "AiSuite:ApiKeys:Chat";
     public bool RequireApiKey { get; set; } = true;
+    /// <summary>
+    /// Per-provider call timeout; null (default) inherits Resilience:TimeoutSeconds.
+    /// Local CPU inference (llama.cpp, Ollama) legitimately exceeds 60s on low-core
+    /// machines — a short reply from Qwen3-4B Q4_K_M measured 85.5s on a 2-vCPU
+    /// Windows CI runner. Hosted vendors should usually inherit the global value:
+    /// it is a billing guard, and a timed-out paid call is never auto-retried.
+    /// </summary>
+    public int? TimeoutSeconds { get; set; }
     /// <summary>
     /// Strip &lt;think&gt;...&lt;/think&gt; reasoning blocks some local models
     /// (e.g. Qwen3) embed in chat content. Handles tags split across streaming

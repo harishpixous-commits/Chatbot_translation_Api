@@ -32,7 +32,22 @@ public sealed class OpenAiCompatibleChatProvider : IChatProvider
     {
         _http = http;
         _options = options;
-        _resilience = resilience;
+        // Provider-scoped timeout override: local CPU inference (llama.cpp/Ollama)
+        // can legitimately exceed the global default; hosted vendors inherit the
+        // global billing-guard semantics unchanged (timeout = ambiguous, never
+        // auto-retried). Only TimeoutSeconds is overridden — retry/failover
+        // semantics pass through untouched.
+        _resilience = options.TimeoutSeconds is int t
+            ? new ResilienceOptions
+            {
+                TimeoutSeconds = t,
+                MaxRetries = resilience.MaxRetries,
+                BaseDelayMs = resilience.BaseDelayMs,
+                RetryAmbiguousFailures = resilience.RetryAmbiguousFailures,
+                AllowAmbiguousKeyFallback = resilience.AllowAmbiguousKeyFallback,
+                AllowQuotaKeyFallback = resilience.AllowQuotaKeyFallback
+            }
+            : resilience;
         _apiKey = apiKey;
     }
 

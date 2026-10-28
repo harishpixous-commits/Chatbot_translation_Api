@@ -104,7 +104,7 @@ jobs:
           $env:AiSuite__OpenAiCompatible__Model = $m.data[0].id
           $env:AiSuite__OpenAiCompatible__RequireApiKey = "false"
           $env:AiSuite__Resilience__MaxRetries = "0"
-          $env:AiSuite__Resilience__TimeoutSeconds = "600"
+          $env:AiSuite__OpenAiCompatible__TimeoutSeconds = "600"
           Start-Process dotnet -ArgumentList 'run','--project','dotnet/samples/SampleApi','--urls','http://127.0.0.1:5199' -RedirectStandardOutput api.out -RedirectStandardError api.err
           $up=$false
           for ($i=0; $i -lt 60; $i++) { try { Invoke-RestMethod http://127.0.0.1:5199/api/ai/info | Out-Null; $up=$true; break } catch { Start-Sleep 2 } }
