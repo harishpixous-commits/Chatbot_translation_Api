@@ -38,6 +38,17 @@ static class TestOptions
     };
 }
 
+
+internal sealed class CapturingChatProvider : IChatProvider
+{
+    public ChatRequestOptions? LastOptions;
+    public string ProviderName => "Capturing";
+    public Task<ChatResponse> ChatAsync(IReadOnlyList<ChatMessage> history, ChatRequestOptions? options = null, CancellationToken ct = default)
+    { LastOptions = options; return Task.FromResult(new ChatResponse("ok", ProviderName, "m")); }
+    public async IAsyncEnumerable<ChatChunk> StreamChatAsync(IReadOnlyList<ChatMessage> history, ChatRequestOptions? options = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    { LastOptions = options; yield return new ChatChunk("ok"); await Task.CompletedTask; }
+}
+
 public class ChatServiceTests
 {
     private static ChatService Sut(IConversationStore? store = null) => new(
@@ -46,6 +57,19 @@ public class ChatServiceTests
         TestOptions.Echo(),
         NullLogger<ChatService>.Instance,
         store);
+
+
+    [Fact]
+    public async Task ChatAsync_PassesTemperatureThroughToProvider()
+    {
+        var cap = new CapturingChatProvider();
+        var sut = new ChatService(new StubChatFactory(cap), new StubTranslationFactory(new EchoTranslationProvider()),
+            TestOptions.Echo(), NullLogger<ChatService>.Instance, null);
+        await sut.ChatAsync(new ChatRequestDto("hello", Temperature: 0.0));
+        Assert.Equal(0.0, cap.LastOptions?.Temperature);
+        await sut.ChatAsync(new ChatRequestDto("hello"));
+        Assert.Null(cap.LastOptions?.Temperature);
+    }
 
     [Fact]
     public async Task ChatAsync_ReturnsEchoReply()

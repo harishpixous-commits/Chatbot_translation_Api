@@ -171,7 +171,17 @@ jobs:
               Write-Output "PROBE RESULT: PASS"
             }
           }
+          # Deterministic control: rerun each FAILED probe at temperature 0 to
+          # separate "model does not know" (wrong even greedy) from "sampling
+          # slipped at the default temperature" (right when greedy). Control
+          # results are printed for diagnosis; the battery verdict is unchanged.
           if ($probeFailures.Count -gt 0) {
+            foreach ($fq in $probeFailures) {
+              $cb = @{ message = $fq; temperature = 0 } | ConvertTo-Json
+              $cr = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5199/api/ai/chat -ContentType 'application/json; charset=utf-8' -Body $cb -TimeoutSec 600
+              Write-Output "CONTROL(temp0) Q: $fq"
+              Write-Output "CONTROL(temp0) A: $($cr.data.reply)"
+            }
             if (Test-Path api.err) { Get-Content api.err -Tail 30 }
             throw "factual probes failed ($($probeFailures.Count) of $($probes.Count)): $($probeFailures -join ' | ')"
           }

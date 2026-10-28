@@ -5,3 +5,7 @@ node_modules/
 dist/
 *.gguf
 *.mp4
+
+# Runtime state created and mutated by the SampleApi at boot (service-key store);
+# never commit live or test-run contents.
+dotnet/samples/SampleApi/ai-suite-settings/

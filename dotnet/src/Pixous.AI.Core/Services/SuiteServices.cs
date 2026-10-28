@@ -11,7 +11,8 @@ public sealed record ChatRequestDto(
     List<ChatMessage>? History = null,
     string? ResponseLanguage = null,
     string? Provider = null,
-    string? SessionId = null);
+    string? SessionId = null,
+    double? Temperature = null);
 
 public sealed record ChatResponseDto(
     string Reply,
@@ -89,7 +90,7 @@ public sealed class ChatService : IChatService
         try
         {
             var reply = await provider.ChatAsync(history,
-                new ChatRequestOptions(SystemPrompt: _options.ChatDefaults.SystemPrompt, ResponseLanguage: targetLang), ct)
+                new ChatRequestOptions(SystemPrompt: _options.ChatDefaults.SystemPrompt, ResponseLanguage: targetLang, Temperature: request.Temperature), ct)
                 .ConfigureAwait(false);
             var finalText = await MaybeTranslateAsync(reply.Content, targetLang, ct).ConfigureAwait(false);
             await PersistAsync(request.SessionId, history, finalText, ct).ConfigureAwait(false);
@@ -114,7 +115,7 @@ public sealed class ChatService : IChatService
         var (history, targetLang) = await PrepareAsync(request, ct).ConfigureAwait(false);
         var provider = _chats.Get(request.Provider);
         await foreach (var chunk in provider.StreamChatAsync(history,
-            new ChatRequestOptions(SystemPrompt: _options.ChatDefaults.SystemPrompt, ResponseLanguage: targetLang), ct)
+            new ChatRequestOptions(SystemPrompt: _options.ChatDefaults.SystemPrompt, ResponseLanguage: targetLang, Temperature: request.Temperature), ct)
             .ConfigureAwait(false))
         {
             yield return chunk;
