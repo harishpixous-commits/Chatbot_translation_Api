@@ -137,12 +137,22 @@ $env:AiSuite__ChatProvider = "OpenAiCompatible"
 $env:AiSuite__OpenAiCompatible__Endpoint = "http://127.0.0.1:8085/v1"
 $env:AiSuite__OpenAiCompatible__Model = "<model id reported by GET /v1/models>"
 $env:AiSuite__OpenAiCompatible__RequireApiKey = "false"
+$env:AiSuite__OpenAiCompatible__TimeoutSeconds = "300"
 dotnet run --project dotnet/samples/SampleApi --urls http://localhost:5199
 ```
 
 Then open http://localhost:5199/demo.html - that is the chatbot.
 $env: settings live only in that PowerShell window; paste them again before
 starting the app from a new window.
+
+TimeoutSeconds is set on the local-model provider only (300s headroom): the
+60s global default is a billing guard for hosted vendors and is left
+untouched. MEASURED: one short Qwen3-4B Q4_K_M reply took 85.5s on a 2-vCPU
+shared CI runner (server warm) - a 60s cap turns a slow-but-working local
+reply into a 502. A laptop CPU is typically faster than that runner, but
+measure on your own machine (the validation battery below times it) and
+adjust; the override is not infinite patience - a hung server still fails
+closed at 300s.
 
 Think-tag stripping ships ON by default (StripThinkTags) - verified at 0.6B.
 
