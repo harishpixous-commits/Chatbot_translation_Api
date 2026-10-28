@@ -295,7 +295,7 @@
 
       <!-- Tab: LLM APIs -->
       <div class="tab" id="tab-llm">
-        <div class="hint">Add keys for <b>any vendors you like — several at once</b> (OpenAI, Anthropic, Gemini, DeepSeek, Groq, Mistral, OpenRouter, Ollama, or any custom OpenAI-compatible endpoint). The assistant tries them <b>in order and automatically falls back</b> to the next key when one is exhausted, invalid or down. Keys are stored server-side, shown masked only, and never leave this machine.</div>
+        <div class="hint">Add keys for <b>any vendors you like — several at once</b> (OpenAI, Anthropic, Gemini, DeepSeek, Groq, Mistral, OpenRouter, Ollama, or any custom OpenAI-compatible endpoint). The assistant tries them <b>in priority order</b>; when a key is definitively rejected (invalid/denied, or rate-limited per your quota-fallback setting) the next key is tried. A timeout, 5xx or network failure is <b>never silently retried or failed over</b> — the call may already have been processed and billed — unless you explicitly opt in. Keys are stored server-side and shown masked only (never returned to the browser); a key is sent only to its own configured provider when a call is made.</div>
         <div id="keyList"><i>Loading…</i></div>
         <div class="sect" id="keyFormWrap">
           <h4 id="keyFormTitle">Add API key</h4>
