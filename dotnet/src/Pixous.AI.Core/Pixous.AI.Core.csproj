@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <PackageId>Pixous.AI.Core</PackageId>
+    <Version>1.2.0</Version>
+    <Description>Reusable chat + translation orchestration, strongly-typed options, runtime selection. No third-party NuGet dependencies.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pixous.AI.Abstractions\Pixous.AI.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+ctranslate2>=4.0
+sentencepiece>=0.2
+indic-nlp-library>=0.92
+sacremoses>=0.1
+mosestokenizer>=1.2
+nltk>=3.8
+regex>=2023.0
+tqdm>=4.66
+pydantic>=2.6
+requests>=2.31

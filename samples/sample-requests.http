@@ -1,0 +1,87 @@
+@base = http://localhost:5000
+
+### 1. Providers (safe to expose)
+GET {{base}}/api/ai/providers
+
+### 2. Diagnostics — providers + key status + languages (no secrets)
+GET {{base}}/api/ai/info
+
+### 3. Current provider selection
+GET {{base}}/api/ai/selection
+
+### 4. Switch chat provider live (Echo | KnowledgeBase | OpenAiCompatible)
+POST {{base}}/api/ai/selection
+Content-Type: application/json
+
+{
+  "chatProvider": "Echo",
+  "translationProvider": null
+}
+
+### 5. Non-streaming chat (envelope: success/data/error/traceId)
+POST {{base}}/api/ai/chat
+Content-Type: application/json
+
+{
+  "message": "what are your services?"
+}
+
+### 6. Chat with history + session + requested language
+POST {{base}}/api/ai/chat
+Content-Type: application/json
+
+{
+  "message": "and pricing?",
+  "history": [{ "role": "user", "content": "hi" }],
+  "sessionId": "demo-1",
+  "responseLanguage": "ta"
+}
+
+### 7. Streaming chat (SSE — use a terminal: curl -N)
+# curl -N -X POST {{base}}/api/ai/chat/stream -H "Content-Type: application/json" -d "{\"message\":\"hi\"}"
+
+### 8. Translate text
+POST {{base}}/api/ai/translation/translate
+Content-Type: application/json
+
+{
+  "text": "Good morning",
+  "targetLanguage": "ta"
+}
+
+### 9. Batch translate (1-100 texts)
+POST {{base}}/api/ai/translation/batch
+Content-Type: application/json
+
+{
+  "texts": ["Good morning", "Thank you"],
+  "targetLanguage": "es"
+}
+
+### 10. Detect language
+POST {{base}}/api/ai/translation/detect-language
+Content-Type: application/json
+
+{
+  "text": "Vanakkam"
+}
+
+### 11. Supported languages
+GET {{base}}/api/ai/translation/languages
+
+### 12. Validation demo — unknown language (expect 400 VALIDATION_ERROR envelope)
+POST {{base}}/api/ai/translation/translate
+Content-Type: application/json
+
+{
+  "text": "hi",
+  "targetLanguage": "xx"
+}
+
+### 13. Validation demo — unknown provider (expect 400 UNKNOWN_PROVIDER)
+POST {{base}}/api/ai/selection
+Content-Type: application/json
+
+{
+  "chatProvider": "Nope"
+}

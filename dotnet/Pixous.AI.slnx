@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/SampleApi/SampleApi.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Pixous.AI.Abstractions/Pixous.AI.Abstractions.csproj" />
+    <Project Path="src/Pixous.AI.AspNetCore/Pixous.AI.AspNetCore.csproj" />
+    <Project Path="src/Pixous.AI.Core/Pixous.AI.Core.csproj" />
+    <Project Path="src/Pixous.AI.Providers/Pixous.AI.Providers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Pixous.AI.Tests.Integration/Pixous.AI.Tests.Integration.csproj" />
+    <Project Path="tests/Pixous.AI.Tests.Unit/Pixous.AI.Tests.Unit.csproj" />
+  </Folder>
+</Solution>

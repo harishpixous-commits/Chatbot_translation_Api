@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- Retarget to net8.0 for older consumers: single-line change, no API used beyond net6. -->
+    <PackageId>Pixous.AI.Abstractions</PackageId>
+    <Version>1.2.0</Version>
+    <Description>Provider-independent abstractions (chat, translation, conversation store) + DTOs for Pixous AI. Zero dependencies.</Description>
+  </PropertyGroup>
+
+</Project>

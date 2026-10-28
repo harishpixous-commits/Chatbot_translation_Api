@@ -1,0 +1,257 @@
+{
+  "captured": "2026-10-27T16:59:50.049Z",
+  "guard": "roundTripCheck=true (default), markerRetry=true (default)",
+  "engine": "IndicTrans2 en-indic/indic-en dist-200M CT2 int8 via local sidecar",
+  "languages": {
+    "ta": {
+      "state": "partial",
+      "rows": [
+        {
+          "source": "Home",
+          "rendered": "வீடு",
+          "outcome": "applied"
+        },
+        {
+          "source": "Settings",
+          "rendered": "அமைப்புகள்",
+          "outcome": "applied"
+        },
+        {
+          "source": "Sign out",
+          "rendered": "Sign out",
+          "outcome": "PRESERVED-ORIGINAL (guard/quality fail-closed)"
+        },
+        {
+          "source": "Search results",
+          "rendered": "தேடல் முடிவுகள்",
+          "outcome": "applied"
+        },
+        {
+          "source": "Welcome to our website.",
+          "rendered": "எங்கள் வலைத்தளத்திற்கு வரவேற்கிறோம்.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Your order has been shipped and will arrive on {{date}}.",
+          "rendered": "உங்கள் ஆர்டர் அனுப்பப்பட்டுள்ளது மற்றும் {{date}} இல் வரும்.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Please enter a valid email address.",
+          "rendered": "செல்லுபடியாகும் மின்னஞ்சல் முகவரியை உள்ளிடவும்.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Pixous Assistant helps you translate your website.",
+          "rendered": "Pixous Assistant உங்கள் வலைத்தளத்தை மொழிபெயர்க்க உதவுகிறது.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Are you sure you want to delete 3 items?",
+          "rendered": "நீங்கள் நிச்சயமாக 3 உருப்படிகளை நீக்க விரும்புகிறீர்களா?",
+          "outcome": "applied"
+        }
+      ]
+    },
+    "hi": {
+      "state": "done",
+      "rows": [
+        {
+          "source": "Home",
+          "rendered": "घर",
+          "outcome": "applied"
+        },
+        {
+          "source": "Settings",
+          "rendered": "सेटिंग्स",
+          "outcome": "applied"
+        },
+        {
+          "source": "Sign out",
+          "rendered": "साइन आउट करें",
+          "outcome": "applied"
+        },
+        {
+          "source": "Search results",
+          "rendered": "खोज परिणाम",
+          "outcome": "applied"
+        },
+        {
+          "source": "Welcome to our website.",
+          "rendered": "हमारी वेबसाइट पर आपका स्वागत है।",
+          "outcome": "applied"
+        },
+        {
+          "source": "Your order has been shipped and will arrive on {{date}}.",
+          "rendered": "आपका ऑर्डर भेज दिया गया है और {{date}} पर पहुंचेगा।",
+          "outcome": "applied"
+        },
+        {
+          "source": "Please enter a valid email address.",
+          "rendered": "कृपया एक वैध ईमेल पता दर्ज करें।",
+          "outcome": "applied"
+        },
+        {
+          "source": "Pixous Assistant helps you translate your website.",
+          "rendered": "पिक्सस असिस्टेंट आपको अपनी वेबसाइट का अनुवाद करने में मदद करता है।",
+          "outcome": "applied"
+        },
+        {
+          "source": "Are you sure you want to delete 3 items?",
+          "rendered": "क्या आप सुनिश्चित हैं कि आप 3 वस्तुओं को हटाना चाहते हैं?",
+          "outcome": "applied"
+        }
+      ]
+    },
+    "te": {
+      "state": "done",
+      "rows": [
+        {
+          "source": "Home",
+          "rendered": "హోమ్",
+          "outcome": "applied"
+        },
+        {
+          "source": "Settings",
+          "rendered": "సెట్టింగులు",
+          "outcome": "applied"
+        },
+        {
+          "source": "Sign out",
+          "rendered": "సైన్ అవుట్ చేయండి",
+          "outcome": "applied"
+        },
+        {
+          "source": "Search results",
+          "rendered": "శోధన ఫలితాలు",
+          "outcome": "applied"
+        },
+        {
+          "source": "Welcome to our website.",
+          "rendered": "మా వెబ్సైట్కు స్వాగతం.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Your order has been shipped and will arrive on {{date}}.",
+          "rendered": "మీ ఆర్డర్ రవాణా చేయబడింది మరియు {{date}} కి వస్తుంది.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Please enter a valid email address.",
+          "rendered": "దయచేసి చెల్లుబాటు అయ్యే ఇమెయిల్ చిరునామాను నమోదు చేయండి.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Pixous Assistant helps you translate your website.",
+          "rendered": "పిక్సస్ అసిస్టెంట్ మీ వెబ్సైట్ను అనువదించడంలో మీకు సహాయపడుతుంది.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Are you sure you want to delete 3 items?",
+          "rendered": "మీరు ఖచ్చితంగా 3 అంశాలను తొలగించాలనుకుంటున్నారా?",
+          "outcome": "applied"
+        }
+      ]
+    },
+    "ml": {
+      "state": "done",
+      "rows": [
+        {
+          "source": "Home",
+          "rendered": "ഹോം",
+          "outcome": "applied"
+        },
+        {
+          "source": "Settings",
+          "rendered": "ക്രമീകരണങ്ങൾ",
+          "outcome": "applied"
+        },
+        {
+          "source": "Sign out",
+          "rendered": "സൈൻ ഔട്ട് ചെയ്യുക",
+          "outcome": "applied"
+        },
+        {
+          "source": "Search results",
+          "rendered": "തിരയൽ ഫലങ്ങൾ",
+          "outcome": "applied"
+        },
+        {
+          "source": "Welcome to our website.",
+          "rendered": "ഞങ്ങളുടെ വെബ്സൈറ്റിലേക്ക് സ്വാഗതം.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Your order has been shipped and will arrive on {{date}}.",
+          "rendered": "നിങ്ങളുടെ ഓർഡർ അയച്ചു, അത് {{date}}-ൽ എത്തും.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Please enter a valid email address.",
+          "rendered": "ദയവായി സാധുവായ ഒരു ഇമെയിൽ വിലാസം നൽകുക.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Pixous Assistant helps you translate your website.",
+          "rendered": "നിങ്ങളുടെ വെബ്സൈറ്റ് വിവർത്തനം ചെയ്യാൻ പിക്സസ് അസിസ്റ്റന്റ് നിങ്ങളെ സഹായിക്കുന്നു.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Are you sure you want to delete 3 items?",
+          "rendered": "നിങ്ങൾക്ക് 3 ഇനങ്ങൾ ഇല്ലാതാക്കണമെന്ന് ഉറപ്പാണോ?",
+          "outcome": "applied"
+        }
+      ]
+    },
+    "kn": {
+      "state": "partial",
+      "rows": [
+        {
+          "source": "Home",
+          "rendered": "ಮನೆತನ",
+          "outcome": "applied"
+        },
+        {
+          "source": "Settings",
+          "rendered": "ಸೆಟ್ಟಿಂಗ್ಗಳು",
+          "outcome": "applied"
+        },
+        {
+          "source": "Sign out",
+          "rendered": "Sign out",
+          "outcome": "PRESERVED-ORIGINAL (guard/quality fail-closed)"
+        },
+        {
+          "source": "Search results",
+          "rendered": "ಹುಡುಕಾಟ ಫಲಿತಾಂಶಗಳು",
+          "outcome": "applied"
+        },
+        {
+          "source": "Welcome to our website.",
+          "rendered": "ನಮ್ಮ ಜಾಲತಾಣಕ್ಕೆ ಸ್ವಾಗತ.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Your order has been shipped and will arrive on {{date}}.",
+          "rendered": "ನಿಮ್ಮ ಆದೇಶವನ್ನು ರವಾನಿಸಲಾಗಿದೆ ಮತ್ತು {{date}} ಗೆ ತಲುಪುತ್ತದೆ.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Please enter a valid email address.",
+          "rendered": "ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ ಇಮೇಲ್ ವಿಳಾಸವನ್ನು ನಮೂದಿಸಿ.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Pixous Assistant helps you translate your website.",
+          "rendered": "ಪಿಕ್ಸಸ್ ಅಸಿಸ್ಟೆಂಟ್ ನಿಮ್ಮ ಜಾಲತಾಣವನ್ನು ಭಾಷಾಂತರಿಸಲು ನಿಮಗೆ ಸಹಾಯ ಮಾಡುತ್ತದೆ.",
+          "outcome": "applied"
+        },
+        {
+          "source": "Are you sure you want to delete 3 items?",
+          "rendered": "ನೀವು ಖಚಿತವಾಗಿ 3 ವಸ್ತುಗಳನ್ನು ಅಳಿಸಲು ಬಯಸುತ್ತೀರಾ?",
+          "outcome": "applied"
+        }
+      ]
+    }
+  }
+}

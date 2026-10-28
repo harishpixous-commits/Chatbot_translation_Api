@@ -1,0 +1,8 @@
+{
+  "chat.title": "Assistant",
+  "chat.placeholder": "Type a message…",
+  "chat.send": "Send",
+  "chat.typing": "typing…",
+  "chat.unavailable": "Sorry — the assistant is unavailable right now.",
+  "lang.label": "Language"
+}

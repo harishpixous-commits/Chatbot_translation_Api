@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Pixous i18n demo</title></head>
+<body>
+  <nav><a href="#" title="Home page">Home</a> <a href="#">Products</a> <a href="#">Contact us</a></nav>
+  <h1>Welcome to our website.</h1>
+  <p id="intro">Your order has been shipped. Track it using the link below.</p>
+  <input id="q" type="text" placeholder="Search products">
+  <input id="pw" type="password" placeholder="Password">
+  <input id="go" type="submit" value="Sign up now">
+  <textarea id="notes">User private draft content</textarea>
+  <div data-no-translate id="brand">Pixous Assistant</div>
+  <div translate="no" id="raw">Do not translate this</div>
+  <p class="no-translate" id="cls">Skipped by class</p>
+  <pre>const code = "keep me";</pre>
+  <svg width="300" height="40"><text id="svgtext" x="5" y="25">Scalable architecture diagram</text></svg>
+  <p>Nested <span>inline <b>formatting</b> stays</span> intact.</p>
+  <img alt="Company logo" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+  <div id="shadow-host"></div>
+  <div id="dynamic"></div>
+  <script src="/pixous-i18n.js"></script>
+  <script>
+    var host = document.getElementById('shadow-host');
+    var shadow = host.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<p id="shadowp">Shadow DOM greeting</p>';
+    var q = new URLSearchParams(location.search);
+    PixousI18n.init({ sourceLanguage: "en", endpoint: "/api/ai/translation/batch" + (q.get("mangle") ? "?mangle=" + q.get("mangle") : "") });
+    setTimeout(function () {
+      var p = document.createElement('p');
+      p.id = 'late';
+      p.textContent = 'Dynamically added content';
+      document.getElementById('dynamic').appendChild(p);
+    }, 800);
+  </script>
+</body>
+</html>

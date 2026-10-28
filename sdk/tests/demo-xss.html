@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>xss safety fixture</title></head>
+<body>
+  <p id="plain">A plain welcome message for every visitor today.</p>
+  <p id="skel">Click <a href="/report" id="lnk">here</a> to download the report.</p>
+  <img id="pic" src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" alt="Company logo">
+  <button id="btn" title="Save your work">Save</button>
+  <script src="/pixous-i18n.js"></script>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      PixousI18n.init({ sourceLanguage: "en", endpoint: "/api/ai/translation/batch" + (q.get("mangle") ? "?mangle=" + q.get("mangle") : "") });
+    })();
+  </script>
+</body>
+</html>

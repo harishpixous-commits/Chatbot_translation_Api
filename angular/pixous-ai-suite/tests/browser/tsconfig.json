@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": [
+      "ES2022",
+      "dom",
+      "dom.iterable"
+    ],
+    "outDir": "./.build/out",
+    "strict": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "types": [],
+    "paths": {
+      "@angular/*": [
+        "../../node_modules/@angular/*"
+      ],
+      "rxjs": [
+        "../../node_modules/rxjs"
+      ],
+      "rxjs/*": [
+        "../../node_modules/rxjs/*"
+      ]
+    }
+  },
+  "angularCompilerOptions": {
+    "compilationMode": "full"
+  },
+  "files": [
+    "main.ts"
+  ]
+}

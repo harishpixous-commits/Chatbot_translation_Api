@@ -1,0 +1,8 @@
+{
+  "name": "pixous-ai-suite-browser-tests",
+  "private": true,
+  "description": "Real-runtime browser tests for the shipped widget. Run: npm install, then CHROME_EXE=<chrome> sh run.sh",
+  "devDependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}

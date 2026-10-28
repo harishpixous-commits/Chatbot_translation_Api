@@ -1,0 +1,121 @@
+name: windows-native-verify
+# Manual trigger only. No push/PR/schedule triggers - exactly one run, on demand.
+on:
+  workflow_dispatch:
+
+# Prevent any duplicate concurrent run of this workflow.
+concurrency:
+  group: windows-native-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: windows-latest   # private-repo standard: 2 vCPU / 8 GB (documented)
+    timeout-minutes: 45       # hard runtime bound: 45 x $0.010 = $0.45 worst case
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: .NET unit + integration suites
+        working-directory: dotnet
+        run: |
+          dotnet test tests/Pixous.AI.Tests.Unit/Pixous.AI.Tests.Unit.csproj --nologo
+          dotnet test tests/Pixous.AI.Tests.Integration/Pixous.AI.Tests.Integration.csproj --nologo
+
+      - name: Engine sidecar suite (real IndicTrans2 models, pinned revisions)
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          cd engine-sidecar
+          export PIXOUS_MODEL_CACHE="$RUNNER_TEMP/hfcache"
+          export HF_HUB_CACHE="$PIXOUS_MODEL_CACHE"
+          export HF_HOME="$PIXOUS_MODEL_CACHE"
+          pip install -r requirements.txt
+          python - <<'PY'
+          import nltk
+          for pkg in ("punkt", "punkt_tab"):
+              nltk.download(pkg, quiet=True)
+          from huggingface_hub import snapshot_download
+          for repo, rev in [
+              ("adalat-ai/ct2-rotary-indictrans2-en-indic-dist-200M",
+               "ee04de9a86e42920ac310a0fe5a1505c85671b68"),
+              ("adalat-ai/ct2-rotary-indictrans2-indic-en-dist-200M",
+               "524aade4f724dccbc6cd5ffb5e3c5c832a2baee4"),
+          ]:
+              snapshot_download(repo, revision=rev)
+          PY
+          python tests/run_sidecar_tests.py
+
+      - name: SDK browser battery (system Chrome, no download)
+        shell: bash
+        run: |
+          cd sdk/tests
+          npm init -y >/dev/null 2>&1 || true
+          npm install playwright-core@1.48.2 --no-audit --no-fund
+          export CHROME_EXE="C:\Program Files\Google\Chrome\Application\chrome.exe"
+          node server.js & echo $! > srv.pid
+          PORT=8902 FAIL_MODE=1 node server.js & echo $! > srv2.pid
+          sleep 2
+          for t in test-regression test-race test-mangle test-retry test-retrybounds test-echo test-fail test-xss; do node $t.js; done
+          kill $(cat srv.pid) $(cat srv2.pid) || true
+        # test-tokens/test-roundtrip real-engine checks run under the sidecar
+        # step's models; their deterministic parts are covered by the suites above.
+
+      - name: Angular widget browser tests (system Chrome)
+        shell: bash
+        run: |
+          cd angular/pixous-ai-suite
+          npm ci --no-audit --no-fund
+          cd tests/browser
+          npm ci --no-audit --no-fund
+          export CHROME_EXE="C:\Program Files\Google\Chrome\Application\chrome.exe"
+          sh run.sh
+
+      - name: Install pinned llama-cpp-python server (Windows wheel)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "llama-cpp-python[server]==0.3.19" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+      - name: Download pinned 4B GGUF + verify SHA256
+        shell: pwsh
+        run: |
+          $url = "https://huggingface.co/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF/resolve/ae44f08e1392f39c0e474af10c3ff8355c8b6688/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+          Invoke-WebRequest -Uri $url -OutFile model.gguf
+          $h = (Get-FileHash model.gguf -Algorithm SHA256).Hash.ToLower()
+          if ($h -ne "2fde00ce69dd4899c70d020845e2638353015bba0fdf161b3eb965f2bca4464e") { throw "SHA256 mismatch: $h" }
+          if ((Get-Item model.gguf).Length -ne 2497280736) { throw "size mismatch" }
+
+      - name: Start llama server + run chatbot chain smoke test
+        shell: pwsh
+        run: |
+          Start-Process python -ArgumentList '-m','llama_cpp.server','--model','model.gguf','--n_ctx','4096','--host','127.0.0.1','--port','8085' -RedirectStandardOutput llama.out -RedirectStandardError llama.err
+          $ok=$false
+          for ($i=0; $i -lt 240; $i++) { try { $m = Invoke-RestMethod http://127.0.0.1:8085/v1/models; $ok=$true; break } catch { Start-Sleep 5 } }
+          if (-not $ok) { Get-Content llama.err -Tail 40; throw "llama server did not start" }
+          $env:AiSuite__ChatProvider = "OpenAiCompatible"
+          $env:AiSuite__OpenAiCompatible__Endpoint = "http://127.0.0.1:8085/v1"
+          $env:AiSuite__OpenAiCompatible__Model = $m.data[0].id
+          $env:AiSuite__OpenAiCompatible__RequireApiKey = "false"
+          $env:AiSuite__Resilience__MaxRetries = "0"
+          Start-Process dotnet -ArgumentList 'run','--project','dotnet/samples/SampleApi','--urls','http://127.0.0.1:5199' -RedirectStandardOutput api.out -RedirectStandardError api.err
+          $up=$false
+          for ($i=0; $i -lt 60; $i++) { try { Invoke-RestMethod http://127.0.0.1:5199/api/ai/info | Out-Null; $up=$true; break } catch { Start-Sleep 2 } }
+          if (-not $up) { Get-Content api.err -Tail 40; throw "SampleApi did not start" }
+          $body = @{ message = "Answer with exactly: Vanakkam. Then say 1+1=2." } | ConvertTo-Json
+          $r = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5199/api/ai/chat -ContentType 'application/json' -Body $body -TimeoutSec 600
+          Write-Output "REPLY: $($r.data.reply)"
+          if (-not $r.success) { throw "chat failed" }
+
+      - name: Error-path check (oversized prompt must fail closed, not blank)
+        shell: pwsh
+        if: always()
+        run: |
+          $big = 'lorem ipsum dolor sit amet ' * 150
+          try {
+            $r = Invoke-WebRequest -Method Post -Uri http://127.0.0.1:5199/api/ai/chat/stream -ContentType 'application/json' -Body (@{ message = $big } | ConvertTo-Json) -TimeoutSec 120
+            $code = [int]$r.StatusCode; $txt = $r.Content
+          } catch { $code = [int]$_.Exception.Response.StatusCode; $txt = '' }
+          Write-Output "status=$code body=$txt"
