@@ -110,6 +110,7 @@ jobs:
           for ($i=0; $i -lt 60; $i++) { try { Invoke-RestMethod http://127.0.0.1:5199/api/ai/info | Out-Null; $up=$true; break } catch { Start-Sleep 2 } }
           if (-not $up) { Get-Content api.err -Tail 40; throw "SampleApi did not start" }
           $body = @{ message = "Answer with exactly: Vanakkam. Then say 1+1=2." } | ConvertTo-Json
+          $t0 = Get-Date
           try {
             $r = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5199/api/ai/chat -ContentType 'application/json' -Body $body -TimeoutSec 600
           } catch {
@@ -118,19 +119,24 @@ jobs:
             if (Test-Path llama.err) { Get-Content llama.err -Tail 30 }
             throw
           }
+          $t1 = Get-Date
+          Write-Output ("CHAT_LATENCY_SECONDS: {0:N1}" -f ($t1 - $t0).TotalSeconds)
           Write-Output "REPLY: $($r.data.reply)"
           if (-not $r.success) {
             if (Test-Path api.err) { Get-Content api.err -Tail 30 }
             throw "chat failed"
           }
-
-      - name: Error-path check (oversized prompt must fail closed, not blank)
-        shell: pwsh
-        if: always()
-        run: |
+          # Fail-closed error-path check while this step's server is known alive:
+          # an oversized prompt (4200 > MaxMessageChars 4000) must return
+          # HTTP 400 + a fixed VALIDATION SSE frame - never a silent blank stream.
           $big = 'lorem ipsum dolor sit amet ' * 150
-          try {
-            $r = Invoke-WebRequest -Method Post -Uri http://127.0.0.1:5199/api/ai/chat/stream -ContentType 'application/json' -Body (@{ message = $big } | ConvertTo-Json) -TimeoutSec 120
-            $code = [int]$r.StatusCode; $txt = $r.Content
-          } catch { $code = [int]$_.Exception.Response.StatusCode; $txt = '' }
-          Write-Output "status=$code body=$txt"
+          @{ message = $big } | ConvertTo-Json -Compress | Set-Content -Path bigbody.json -NoNewline -Encoding utf8
+          $raw = curl.exe -s -w "`n%{http_code}" -X POST http://127.0.0.1:5199/api/ai/chat/stream -H "Content-Type: application/json" -d "@bigbody.json"
+          $lines = @(($raw | Out-String) -split "`r?`n" | Where-Object { $_ -ne '' })
+          $status = $lines[-1]
+          $bodyTxt = ($lines | Select-Object -SkipLast 1) -join "`n"
+          Write-Output "ERRORPATH status=$status body=$bodyTxt"
+          if ($status -ne '400' -or $bodyTxt -notlike '*"code":"VALIDATION"*') {
+            if (Test-Path api.err) { Get-Content api.err -Tail 30 }
+            throw "error-path contract broken: expected HTTP 400 + VALIDATION frame, got status=$status"
+          }
