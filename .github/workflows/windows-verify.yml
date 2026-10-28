@@ -142,17 +142,22 @@ jobs:
           }
           # Factual-probe battery through the real chain (smoke-level sanity with
           # deterministic expected content - NOT a quality-acceptance gate):
+          # Match = allowlist of equivalent CORRECT forms (e.g. தில்லி / டெல்லி /
+          # நியூடெல்லி are all right). Full reply is always printed: a failed match
+          # is reviewed against the whole answer before calling it a quality finding.
           $probes = @(
-            @{ q = 'Answer in one word: what is the capital of India?'; expect = 'delhi' },
-            @{ q = 'தமிழில் பதில் சொல்: இந்தியாவின் தலைநகர் எது?'; expect = 'தில்லி' }
+            @{ q = 'Answer in one word: what is the capital of India?'; any = @('delhi') },
+            @{ q = 'தமிழில் பதில் சொல்: இந்தியாவின் தலைநகர் எது?'; any = @('தில்லி','டெல்லி','நியூடெல்லி') }
           )
           foreach ($p in $probes) {
             $pb = @{ message = $p.q } | ConvertTo-Json
             $pr = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5199/api/ai/chat -ContentType 'application/json; charset=utf-8' -Body $pb -TimeoutSec 600
             Write-Output "PROBE Q: $($p.q)"
             Write-Output "PROBE A: $($pr.data.reply)"
-            if (-not $pr.success -or $pr.data.reply -notmatch [regex]::Escape($p.expect)) {
+            $hit = $false
+            foreach ($e in $p.any) { if ($pr.data.reply -match [regex]::Escape($e)) { $hit = $true; break } }
+            if (-not $pr.success -or -not $hit) {
               if (Test-Path api.err) { Get-Content api.err -Tail 30 }
-              throw "factual probe failed: expected reply to contain '$($p.expect)'"
+              throw "factual probe failed: reply contained none of [$($p.any -join ', ')]"
             }
           }
