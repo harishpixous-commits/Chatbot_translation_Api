@@ -50,7 +50,7 @@ jobs:
           ]:
               snapshot_download(repo, revision=rev)
           PY
-          python tests/run_sidecar_tests.py
+          sh tests/run.sh
 
       - name: SDK browser battery (system Chrome, no download)
         shell: bash
