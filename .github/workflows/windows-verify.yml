@@ -140,3 +140,19 @@ jobs:
             if (Test-Path api.err) { Get-Content api.err -Tail 30 }
             throw "error-path contract broken: expected HTTP 400 + VALIDATION frame, got status=$status"
           }
+          # Factual-probe battery through the real chain (smoke-level sanity with
+          # deterministic expected content - NOT a quality-acceptance gate):
+          $probes = @(
+            @{ q = 'Answer in one word: what is the capital of India?'; expect = 'delhi' },
+            @{ q = 'தமிழில் பதில் சொல்: இந்தியாவின் தலைநகர் எது?'; expect = 'தில்லி' }
+          )
+          foreach ($p in $probes) {
+            $pb = @{ message = $p.q } | ConvertTo-Json
+            $pr = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5199/api/ai/chat -ContentType 'application/json; charset=utf-8' -Body $pb -TimeoutSec 600
+            Write-Output "PROBE Q: $($p.q)"
+            Write-Output "PROBE A: $($pr.data.reply)"
+            if (-not $pr.success -or $pr.data.reply -notmatch [regex]::Escape($p.expect)) {
+              if (Test-Path api.err) { Get-Content api.err -Tail 30 }
+              throw "factual probe failed: expected reply to contain '$($p.expect)'"
+            }
+          }
