@@ -33,6 +33,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           cd engine-sidecar
+          export PYTHONIOENCODING=utf-8
           export PIXOUS_MODEL_CACHE="$RUNNER_TEMP/hfcache"
           export HF_HUB_CACHE="$PIXOUS_MODEL_CACHE"
           export HF_HOME="$PIXOUS_MODEL_CACHE"

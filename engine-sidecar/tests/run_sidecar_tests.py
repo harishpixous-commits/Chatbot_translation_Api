@@ -15,6 +15,11 @@ import sys
 
 import requests
 
+# Windows consoles default to cp1252 and crash on Indic output; force UTF-8.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 BASE = os.environ.get("SIDECAR_URL", "http://127.0.0.1:8765")
 AUTH_BASE = os.environ.get("SIDECAR_AUTH_URL", "http://127.0.0.1:8766")
 TOKEN = "test-secret-token"
