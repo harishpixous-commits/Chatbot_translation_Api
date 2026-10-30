@@ -12,4 +12,4 @@ node server.js &
 SPID=$!
 trap 'kill $SPID 2>/dev/null' EXIT
 sleep 1
-node test-widget.js
+node ${WIDGET_SCRIPT:-test-widget.js}

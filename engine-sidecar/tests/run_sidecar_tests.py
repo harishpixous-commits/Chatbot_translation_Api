@@ -87,6 +87,37 @@ def main():
         check("direct pair not marked pivot", d.get("pivot") is False)
         check("resident model reported", "en-indic" in requests.get(BASE + "/health", timeout=10).json()["resident_models"])
 
+    # --- structure preservation: multi-line Markdown must keep its lines + markers ---
+    md = "Steps:\n- Open Settings\n- Add a key\n\n1. Press Test\n## Done"
+    for lang in ("ta", "hi", "te", "ml", "kn"):
+        r = requests.post(BASE + "/translate", json={"source": "en", "target": lang, "items": [md, "Single line."]}, timeout=300)
+        if r.status_code != 200:
+            check("structure en->" + lang, False, "status " + str(r.status_code))
+            continue
+        t = r.json()["translations"]
+        lines = t[0].split("\n")
+        check("structure en->%s keeps 6 lines" % lang, len(lines) == 6, t[0])
+        check("structure en->%s keeps list/heading markers and blank line" % lang,
+              lines[1].startswith("- ") and lines[2].startswith("- ") and lines[3] == ""
+              and lines[4].startswith("1. ") and lines[5].startswith("## "), t[0])
+        check("structure en->%s single-line item unchanged in shape" % lang, "\n" not in t[1], t[1])
+
+    # --- inline spans: emoji/code/bold must survive in place (no stray symbols) ---
+    span = "Email `hello@pixous.example` or see **Our Services** \U0001F331 now."
+    for lang in ("ta", "hi", "te", "ml", "kn"):
+        r = requests.post(BASE + "/translate", json={"source": "en", "target": lang, "items": [span]}, timeout=300)
+        t = r.json()["translations"][0] if r.status_code == 200 else ""
+        check("spans en->%s keep code verbatim, one bold pair, emoji" % lang,
+              "`hello@pixous.example`" in t and t.count("**") == 2 and "\U0001F331" in t and "\u2020" not in t, t)
+
+    # --- no silent truncation: every sentence of a long item must come back ---
+    import re as _re
+    longtxt = " ".join("Sentence %d: the team shipped release %d today." % (i, i) for i in range(1, 31))
+    r = requests.post(BASE + "/translate", json={"source": "en", "target": "hi", "items": [longtxt]}, timeout=300)
+    t = r.json()["translations"][0] if r.status_code == 200 else ""
+    kept = {int(n) for n in _re.findall(r"\d+", t)}
+    check("long item: all 30 sentence numbers survive (was 15 before bounded chunking)", set(range(1, 31)) <= kept, "kept %d" % len(kept))
+
     # --- auth instance (optional, needs token-configured server on :8766) ---
     try:
         requests.get(AUTH_BASE + "/health", timeout=2)

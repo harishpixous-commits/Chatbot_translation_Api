@@ -427,6 +427,9 @@
   // Sentinel: engine response failed token round-trip validation. Fail-closed:
   // the original block stays, the page is marked partial. Never cached.
   var TOKEN_FAIL = { tokenFail: true };
+  // Server reported letters from a script that is not the target's (objective script check, not accuracy):
+  // keep the original, count the page as partial. Old servers do not send the field: no change for them.
+  var SCRIPT_FAIL = { scriptFail: true };
 
   function newTokenPrefix(texts) {
     for (var attempt = 0; attempt < 20; attempt++) {
@@ -586,8 +589,10 @@
     }).then(function (envelope) {
       var data = envelope && (envelope.data || envelope);
       if (!data || !Array.isArray(data.translatedTexts)) throw new Error("unexpected response shape");
+      var anom = Array.isArray(data.scriptAnomalyIndexes) ? data.scriptAnomalyIndexes : [];
       return data.translatedTexts.map(function (t, i) {
         if (typeof t !== "string") return TOKEN_FAIL;
+        if (anom.indexOf(i) !== -1) return SCRIPT_FAIL;
         var restored = restoreTokens(t, prot.maps[i], prot.prefix);
         return restored === null ? TOKEN_FAIL : restored;
       });
@@ -611,10 +616,16 @@
       var failedSkeletons = [];
       var echoRejected = 0;
       var tokenRejected = 0;
+      var scriptRejected = 0;
       for (var i = 0; i < plan.length; i++) {
         var item = plan[i];
         var t = map.get(item.text);
         if (t == null) continue;
+        if (t === SCRIPT_FAIL) {
+          scriptRejected++;
+          if (target) failNote(target + "|" + item.text);
+          continue;
+        }
         if (t === TOKEN_FAIL) {
           // interpolation-token corruption in the engine response: preserve
           // original + partial. Skeletons go through the one bounded retry
@@ -657,6 +668,11 @@
       }
     } finally {
       applying = false;
+    }
+    if (scriptRejected && gen === generation) {
+      partialBlocks += scriptRejected;
+      setState("partial");
+      log0(new Error(scriptRejected + " block(s) kept in original language: translation contained letters from an unexpected script"));
     }
     if (tokenRejected && gen === generation) {
       partialBlocks += tokenRejected;
@@ -860,7 +876,7 @@
           if (translations === null) { superseded = true; return; } // aborted: superseded
           for (var k = 0; k < chunk.length; k++) {
             var t = translations[k];
-            if (t === TOKEN_FAIL) { map.set(chunk[k], TOKEN_FAIL); }
+            if (t === TOKEN_FAIL || t === SCRIPT_FAIL) { map.set(chunk[k], t); }
             else if (typeof t === "string" && t.length) {
               var kd = kindByText.get(chunk[k]);
               if (cfg.roundTripCheck && kd && kd.plain &&
@@ -911,7 +927,7 @@
         for (var i = 0; i < verifiable.length; i++) {
           var sc0 = verifiable[i], entry = rtPending.get(sc0);
           var b = back[i];
-          if (b === TOKEN_FAIL || typeof b !== "string" || !b.length) {
+          if (b === TOKEN_FAIL || b === SCRIPT_FAIL || typeof b !== "string" || !b.length) {
             // unverifiable back-translation: fail closed, keep original
             rejected++;
             log0(new Error("round-trip check unverifiable, kept original: " + JSON.stringify(sc0)));

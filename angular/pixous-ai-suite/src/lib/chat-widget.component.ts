@@ -3,13 +3,14 @@ import { AfterViewChecked, Component, ElementRef, Input, ViewChild, inject } fro
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { merge } from 'rxjs';
-import { AiChatService } from './ai-chat.service';
+import { AiChatService, chatErrorText } from './ai-chat.service';
 
 /**
  * Drop-in chat widget (standalone — no NgModule needed).
  *
  * Popup-style assistant branded "Pixous Assistant": gradient header with
- * online status, language badge, quick-reply chips, typing indicator.
+ * observed availability (no status claim until an interaction proves one),
+ * language badge, quick-reply chips, typing indicator.
  *
  * Usage:
  *   <pix-chat-widget title="Pixous Assistant" responseLanguage="ta" />
@@ -17,25 +18,7 @@ import { AiChatService } from './ai-chat.service';
  * Inputs are plain data (no secrets): the service reads apiBaseUrl
  * from AI_SUITE_CONFIG. Style via ::ng-deep or the documented CSS vars.
  */
-/**
- * User-facing stream failure text, keyed by the server's error code.
- * Distinct, actionable categories - never one collapsed "is it running?" for everything.
- */
-function streamErrorText(err: unknown): string {
-  const e = err as { code?: string; message?: string } | undefined;
-  switch (e?.code) {
-    case 'VALIDATION':
-      return e.message ?? 'That message was not accepted.';
-    case 'UPSTREAM_ABORTED':
-      return 'The reply was interrupted - the model server dropped the stream mid-answer. Please try again; if it keeps happening, start a fresh chat.';
-    case 'UPSTREAM_UNREACHABLE':
-      return 'The model server is not responding. Check that the local model server is running, then try again.';
-    case 'SERVER_ERROR':
-      return 'Something went wrong on the server. Check the API logs for details.';
-    default:
-      return 'Sorry - the assistant is unavailable right now.';
-  }
-}
+/** Stream failures use the shared taxonomy in ai-chat.service (chatErrorText). */
 
 @Component({
   selector: 'pix-chat-widget',
@@ -47,7 +30,11 @@ function streamErrorText(err: unknown): string {
         <span class="pix-avatar">P</span>
         <span class="pix-who">
           <b>{{ title }}</b>
-          <small><i class="pix-dot"></i>Online · Pixous Assistant</small>
+          <ng-container *ngIf="availability$ | async as avail">
+            <small *ngIf="avail !== 'unknown'">
+              <i class="pix-dot" [class.pix-bad]="avail === 'unavailable'"></i>{{ avail === 'online' ? 'Online' : 'Unavailable' }}
+            </small>
+          </ng-container>
         </span>
         <span class="pix-lang" *ngIf="responseLanguage">{{ responseLanguage | uppercase }}</span>
       </header>
@@ -60,6 +47,7 @@ function streamErrorText(err: unknown): string {
           [class.pix-assistant]="m.role === 'assistant'"
         >
           <span class="pix-md" [innerHTML]="renderRich(m.content)"></span>
+          <small class="pix-note" *ngIf="m.translationWithheld">Shown in the original language: the translation looked unreliable.</small>
         </div>
         <div *ngIf="chat.typing$ | async" class="pix-typing"><span></span><span></span><span></span></div>
         <div class="pix-chips" *ngIf="quickReplies.length">
@@ -83,10 +71,11 @@ function streamErrorText(err: unknown): string {
   styles: [
     `
       .pix-chat { display: flex; flex-direction: column; height: 600px; max-width: 384px; border-radius: 22px; overflow: hidden; font-family: inherit; background: #f3f5f9; box-shadow: 0 24px 60px rgba(20,30,60,.28); }
-      .pix-chat-head { padding: 14px; background: linear-gradient(135deg, #34d399, #10b981); color: #fff; display: flex; align-items: center; gap: 10px; }
+      .pix-chat-head { padding: 14px; background: linear-gradient(135deg, #047857, #065f46); color: #fff; display: flex; align-items: center; gap: 10px; }
       .pix-avatar { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.28); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; }
-      .pix-who { flex: 1; } .pix-who b { font-size: 16px; } .pix-who small { display: block; font-size: 12px; opacity: .92; }
-      .pix-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #eafff3; margin-right: 4px; }
+      .pix-who { flex: 1; } .pix-who b { font-size: 16px; } .pix-who small { display: block; font-size: 12px; }
+      .pix-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #d1fae5; margin-right: 5px; }
+      .pix-dot.pix-bad { background: #fecaca; }
       .pix-lang { background: rgba(255,255,255,.22); border-radius: 10px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
       .pix-chat-body { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; }
       .pix-msg { max-width: 88%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; font-size: 14px; line-height: 1.45; }
@@ -96,6 +85,7 @@ function streamErrorText(err: unknown): string {
       .pix-md code.pix-inline { background: rgba(0,0,0,.08); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
       .pix-msg.pix-user .pix-md code.pix-inline { background: rgba(255,255,255,.25); }
       .pix-md a { color: inherit; text-decoration: underline; }
+      .pix-note { display: block; margin-top: 4px; font-size: 11px; opacity: .7; }
       .pix-typing { display: flex; gap: 5px; padding: 12px 14px; background: #fff; border: 1px solid #e6e8ef; border-radius: 16px; width: fit-content; font-style: normal; }
       .pix-typing span { width: 7px; height: 7px; border-radius: 50%; background: #9aa0ae; animation: pixb 1s infinite; }
       .pix-typing span:nth-child(2) { animation-delay: .15s; } .pix-typing span:nth-child(3) { animation-delay: .3s; }
@@ -103,8 +93,8 @@ function streamErrorText(err: unknown): string {
       .pix-chips { display: flex; flex-wrap: wrap; gap: 8px; }
       .pix-chips button { border: 1px solid #d8dce6; background: #fff; border-radius: 999px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
       .pix-chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e6e8ef; background: #fff; align-items: center; }
-      .pix-chat-input input { flex: 1; padding: 11px 16px; border: 1.5px solid #10b981; border-radius: 999px; font-size: 14px; outline: none; }
-      .pix-chat-input button { width: 44px; height: 44px; border: 0; border-radius: 50%; background: #10b981; color: #fff; cursor: pointer; font-size: 17px; }
+      .pix-chat-input input { flex: 1; padding: 11px 16px; border: 1.5px solid #047857; border-radius: 999px; font-size: 14px; outline: none; }
+      .pix-chat-input button { width: 44px; height: 44px; border: 0; border-radius: 50%; background: #047857; color: #fff; cursor: pointer; font-size: 17px; }
       .pix-chat-input button:disabled { opacity: 0.5; cursor: default; }
     `,
   ],
@@ -130,6 +120,7 @@ export class ChatWidgetComponent implements AfterViewChecked {
   @ViewChild('body') private body?: ElementRef<HTMLDivElement>;
 
   protected chat = inject(AiChatService);
+  protected readonly availability$ = this.chat.availability$;
   protected draft = '';
   protected sending = false;
   private pendingScroll = false;
@@ -196,7 +187,7 @@ export class ChatWidgetComponent implements AfterViewChecked {
           });
         } else if (!streamed) {
           this.chat.retractPending();
-          this.chat.pushError(streamErrorText(err));
+          this.chat.pushError(chatErrorText(err));
         } else {
           // The reply started streaming and then broke. Keep the partial text
           // (it may have been billed) and say plainly it was cut off - never

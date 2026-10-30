@@ -60,3 +60,11 @@ an app that rewrites attributes after translation owns re-triggering.
 - `interpolationPatterns` (RegExp[], default covers `{{x}}`, `${x}`, `%s/%d/%i/%f`, ICU `{name}`) - in-text tokens protected verbatim through the engine; corruption fails closed (original + partial).
 - `overrides` (object, default {}) - integrator-supplied exact-match glossary, e.g. `{ "Sign out": { ta: "..." } }`. Applied without an engine call, exempt from the echo heuristic. Use for context-less UI labels the engine gets wrong; nothing is shipped by default.
 - `tokenMarkFactory` (fn) - testing seam for token-marker prefixes.
+
+## Script anomaly (candidate)
+
+If the server response includes `scriptAnomalyIndexes` (batch route), the SDK keeps the original text for those items and sets `data-pixous-i18n="partial"`. Servers that do not send the field behave as before. The check is an objective script scan, not a translation-accuracy check. See docs/configuration.md.
+
+### Stranded blocks and "partial" (documented behaviour, tested by `sdk/tests/test-stranded.js`)
+
+A block that fails (server-flagged script anomaly, marker or token corruption, echo) on 2 separate passes (`failedBlockMaxAttempts`) is stranded for the session: it is not re-sent, its original text stays, and every later pass for that language ends `partial` even if the server response of that pass flags nothing (`scriptAnomalyIndexes` empty). `PixousI18n.clearCache()` re-enables it. With a non-deterministic engine, a transient garble seen twice therefore keeps a page `partial` for the rest of the session. This is the designed storm guard, not a transport or aggregation defect (deterministic test, no model); whether 2 attempts is the right limit is a product choice that is not changed here.

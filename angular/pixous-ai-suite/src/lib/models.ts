@@ -21,6 +21,8 @@ export interface ChatResponse {
   model?: string;
   responseLanguage?: string;
   sessionId?: string;
+  /** true: translation was withheld (unexpected script); `reply` is the original-language text. null/absent: not checked or nothing withheld - NOT a correctness statement. */
+  replyScriptAnomaly?: boolean | null;
 }
 
 export interface TranslateRequest {
@@ -35,6 +37,8 @@ export interface TranslateResponse {
   targetLanguage: string;
   detectedSourceLanguage?: string;
   provider: string;
+  /** true: output contains letters from an unexpected script (text is returned unedited). null/absent: not checked. */
+  scriptAnomaly?: boolean | null;
 }
 
 export interface SupportedLanguage {

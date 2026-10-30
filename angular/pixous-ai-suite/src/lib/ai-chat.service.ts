@@ -13,6 +13,72 @@ import {
 export interface ChatUiMessage extends ChatMessage {
   id: string;
   pending?: boolean;
+  /** Reply is shown in the model's original language because its translation was withheld. */
+  translationWithheld?: boolean;
+}
+
+/** Observed availability of the assistant, proven by real interactions only. */
+export type ChatAvailability = 'unknown' | 'online' | 'unavailable';
+
+interface ErrorParts { code?: string; message?: string; status?: number; }
+
+/**
+ * Pulls the stable category out of whatever a failure surfaced as: our own
+ * Error with .code (SSE frame parsed by stream(), or envelope failure in
+ * send()), an HttpErrorResponse whose body is the ApiResponse envelope
+ * (error.error.{code,message}) or ASP.NET ProblemDetails (error.code
+ * extension + error.title), or a raw network failure (status 0).
+ */
+function errorParts(err: unknown): ErrorParts {
+  const e = err as {
+    code?: string; message?: string; status?: number;
+    error?: { code?: string; title?: string; error?: { code?: string; message?: string } };
+  } | undefined;
+  return {
+    code: e?.error?.error?.code ?? e?.error?.code ?? e?.code,
+    message: e?.error?.error?.message ?? e?.error?.title ?? e?.message,
+    status: e?.status,
+  };
+}
+
+/**
+ * User-facing failure text, keyed by the server's stable error code.
+ * One taxonomy for both paths - SSE error frames (VALIDATION,
+ * UPSTREAM_ABORTED, UPSTREAM_UNREACHABLE, SERVER_ERROR) and non-streaming
+ * HTTP failures (VALIDATION_ERROR, PROVIDER_NOT_CONFIGURED,
+ * AI_PROVIDER_UNAVAILABLE, INTERNAL_ERROR, network status 0). Distinct,
+ * actionable categories: never one collapsed "is it running?" for
+ * everything, and never provider-authored text beyond the server's own
+ * client-safe message.
+ */
+export function chatErrorText(err: unknown): string {
+  const e = errorParts(err);
+  switch (e.code) {
+    case 'VALIDATION':
+    case 'VALIDATION_ERROR':
+      return e.message ?? 'That message was not accepted.';
+    case 'UPSTREAM_ABORTED':
+      return 'The reply was interrupted - the model server dropped the stream mid-answer. Please try again; if it keeps happening, start a fresh chat.';
+    case 'UPSTREAM_UNREACHABLE':
+    case 'AI_PROVIDER_UNAVAILABLE':
+      return 'The model server is not responding. Check that the local model server is running, then try again.';
+    case 'PROVIDER_NOT_CONFIGURED':
+      return 'The assistant is not configured on the server yet. Ask the site owner to finish the AI setup.';
+    case 'SERVER_ERROR':
+    case 'INTERNAL_ERROR':
+      return 'Something went wrong on the server. Check the API logs for details.';
+    default:
+      if (e.status === 0) {
+        return 'The assistant cannot be reached. Check your connection and that the API server is running, then try again.';
+      }
+      return 'Sorry - the assistant is unavailable right now.';
+  }
+}
+
+/** Availability a failure proves: validation answers mean the API itself responded. */
+function availabilityAfterError(err: unknown): ChatAvailability {
+  const code = errorParts(err).code;
+  return code === 'VALIDATION' || code === 'VALIDATION_ERROR' ? 'online' : 'unavailable';
 }
 
 /**
@@ -40,6 +106,15 @@ export class AiChatService {
 
   private readonly _typing = new BehaviorSubject<boolean>(false);
   readonly typing$ = this._typing.asObservable();
+
+  private readonly _availability = new BehaviorSubject<ChatAvailability>('unknown');
+  /**
+   * Observed availability ONLY: starts 'unknown' (no claim is made), turns
+   * 'online' after a completed reply or a validation answer (the API clearly
+   * responded), 'unavailable' after a real failure. It reflects what
+   * interactions proved - it is not a health probe and never guessed.
+   */
+  readonly availability$ = this._availability.asObservable();
 
   /** Non-streaming chat. Appends user + assistant messages to messages$. */
   send(
@@ -71,14 +146,18 @@ export class AiChatService {
       .pipe(
         map((env) => {
           if (!env.success || !env.data) {
-            throw new Error(env.error?.message ?? 'Chat failed.');
+            const e = new Error(env.error?.message ?? 'Chat failed.') as Error & { code?: string };
+            if (env.error?.code) e.code = env.error.code;
+            throw e;
           }
           const res = env.data;
-          this.push({ role: 'assistant', content: res.reply });
+          this.push({ role: 'assistant', content: res.reply, translationWithheld: res.replyScriptAnomaly === true });
+          this._availability.next('online');
           return res;
         }),
         catchError((err) => {
-          this.push({ role: 'assistant', content: 'Sorry - the assistant is unavailable right now.' });
+          this._availability.next(availabilityAfterError(err));
+          this.push({ role: 'assistant', content: chatErrorText(err) });
           return throwError(() => err);
         }),
       );
@@ -174,6 +253,10 @@ export class AiChatService {
           yield data;
         }
       }
+      this._availability.next('online');
+    } catch (err) {
+      this._availability.next(availabilityAfterError(err));
+      throw err;
     } finally {
       this.patch(pendingId, full, false);
       this._typing.next(false);
@@ -193,7 +276,7 @@ export class AiChatService {
   }
 
   // ── internals ──
-  private push(m: ChatMessage & { pending?: boolean }): string {
+  private push(m: ChatMessage & { pending?: boolean; translationWithheld?: boolean }): string {
     const id = Math.random().toString(36).slice(2);
     this._messages.next([...this._messages.value, { ...m, id }]);
     this._typing.next(false);

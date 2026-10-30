@@ -27,7 +27,13 @@ public sealed class SettingsTokenService
         public DateTime LockedUntil;
     }
 
-    public SettingsTokenService(Func<DateTime>? clock = null) => _clock = clock ?? (() => DateTime.UtcNow);
+    private readonly int _maxTrackedCallers;
+
+    public SettingsTokenService(Func<DateTime>? clock = null, int maxTrackedCallers = 50_000)
+    {
+        _clock = clock ?? (() => DateTime.UtcNow);
+        _maxTrackedCallers = Math.Max(16, maxTrackedCallers);
+    }
 
     public (string Token, DateTime ExpiresUtc) Issue(SettingsOptions options)
     {
@@ -60,7 +66,22 @@ public sealed class SettingsTokenService
     public TimeSpan RegisterFailure(string callerKey)
     {
         var now = _clock();
-        var s = _attempts.GetOrAdd(callerKey, _ => new AttemptState { WindowStart = now });
+        AttemptState s;
+        // One gate makes purge + capacity check + eviction + insert atomic, so concurrent
+        // writers cannot overshoot the cap or evict an active lockout between check and insert.
+        lock (_gate)
+        {
+            PurgeAttempts(now);
+            if (!_attempts.TryGetValue(callerKey, out var existing))
+            {
+                if (_attempts.Count >= _maxTrackedCallers && !MakeRoom(now))
+                    // Table is full of ACTIVE lockouts: fail closed for this untracked caller instead of growing.
+                    return Lockout;
+                existing = new AttemptState { WindowStart = now };
+                _attempts[callerKey] = existing;
+            }
+            s = existing;
+        }
         lock (s)
         {
             if (now - s.WindowStart > FailWindow)
@@ -78,6 +99,36 @@ public sealed class SettingsTokenService
             return s.LockedUntil > now ? s.LockedUntil - now : TimeSpan.Zero;
         }
     }
+
+    private int _attemptCalls;
+    private readonly object _gate = new();
+
+    /// <summary>Bounds the attempt map under hostile many-source traffic: every 256 failures,
+    /// drop entries whose failure window expired and that are not locked.</summary>
+    private void PurgeAttempts(DateTime now)
+    {
+        if (Interlocked.Increment(ref _attemptCalls) % 256 != 0) return;
+        foreach (var kv in _attempts)
+            if (kv.Value.LockedUntil <= now && now - kv.Value.WindowStart > FailWindow)
+                _attempts.TryRemove(kv.Key, out _);
+    }
+
+    /// <summary>At capacity: drop expired entries, then (batch, amortised) the oldest unlocked ones.
+    /// Never evicts an active lockout. Returns false when no room could be made.</summary>
+    private bool MakeRoom(DateTime now)
+    {
+        foreach (var kv in _attempts)
+            if (kv.Value.LockedUntil <= now && now - kv.Value.WindowStart > FailWindow)
+                _attempts.TryRemove(kv.Key, out _);
+        if (_attempts.Count < _maxTrackedCallers) return true;
+        var drop = _attempts.Where(kv => kv.Value.LockedUntil <= now)
+            .OrderBy(kv => kv.Value.WindowStart).Take(Math.Max(1, _maxTrackedCallers / 10)).Select(kv => kv.Key).ToList();
+        foreach (var k in drop) _attempts.TryRemove(k, out _);
+        return _attempts.Count < _maxTrackedCallers;
+    }
+
+    /// <summary>Entries currently tracked (for tests/diagnostics).</summary>
+    public int TrackedCallers => _attempts.Count;
 
     public void RegisterSuccess(string callerKey) => _attempts.TryRemove(callerKey, out _);
 

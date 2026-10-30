@@ -1,0 +1,8 @@
+[
+ {"source":"en","target":"ta","phrase":"\\brole\\b","replacement":"பதவி",
+  "when":"resume|applying|apply|careers|subject line|position|job|hiring",
+  "note":"role = job position. Sense-scoped by 'when'; NOT applied to 'role of the manager' or 'played the role'. Replacement NOT native-certified."},
+ {"source":"en","target":"ta","phrase":"you(?:'re| are)(?: most| very)? welcome\\b","replacement":"பரவாயில்லை",
+  "when":"thank|thanks|help",
+  "note":"thanks-reply sense only, cue required in the same line. NOT native-certified."}
+]

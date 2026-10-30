@@ -1,3 +1,4 @@
+using Pixous.AI.Abstractions;
 using System.Net;
 using System.Text;
 using Pixous.AI.Core.Configuration;
@@ -46,6 +47,19 @@ public sealed class PixousSelfHostedTranslationProviderTests
         Assert.Contains("\"items\":[\"Welcome to our website.\"]", handler.LastBody);
     }
 
+    [Theory]
+    [InlineData("""{"translations":["x"],"quality":{"checked":true,"script_anomaly_items":[0]}}""", true)]
+    [InlineData("""{"translations":["x"],"quality":{"checked":true,"script_anomaly_items":[]}}""", false)]
+    [InlineData("""{"translations":["x"],"quality":{"checked":false,"script_anomaly_items":[]}}""", null)]
+    [InlineData("""{"translations":["x"]}""", null)]
+    [InlineData("""{"translations":["x"],"quality":"garbage"}""", null)]
+    public async Task Translate_MapsSidecarScriptAnomaly_NullWhenNotChecked(string body, bool? expected)
+    {
+        var handler = new StubHandler { Body = body };
+        var result = await NewProvider(handler).TranslateAsync("Hello.", "ta", "en");
+        Assert.Equal(expected, result.ScriptAnomaly);
+    }
+
     [Fact]
     public async Task Translate_SendsBearerToken_WhenConfigured()
     {
@@ -63,6 +77,79 @@ public sealed class PixousSelfHostedTranslationProviderTests
         var result = await provider.TranslateAsync("Already Tamil target.", "en", "en");
         Assert.Equal("Already Tamil target.", result.TranslatedText);
         Assert.Null(handler.LastBody);
+    }
+
+    [Theory]
+    [InlineData("""{"detail":"item exceeds 2000 chars"}""")]
+    [InlineData("<html><body><h1>413</h1>Your text: SECRET-REFLECTED-INPUT</body></html>")]
+    [InlineData("""{"detail":"/srv/engine/models/internal-path token=sk-live-123 SECRET-REFLECTED-INPUT"}""")]
+    [InlineData("")]
+    public async Task Translate_Sidecar413_IsFixedWordingValidationError_NoUpstreamBodyForwarded(string upstreamBody)
+    {
+        var handler = new StubHandler { Status = HttpStatusCode.RequestEntityTooLarge, Body = upstreamBody };
+        var provider = NewProvider(handler);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => provider.TranslateAsync("Hello.", "ta", "en"));
+        Assert.Equal(PixousSelfHostedTranslationProvider.SizeLimitMessage, ex.Message);
+        Assert.DoesNotContain("SECRET-REFLECTED-INPUT", ex.ToString());
+        Assert.DoesNotContain("sk-live", ex.ToString());
+        Assert.DoesNotContain("internal-path", ex.ToString());
+        Assert.Contains("413", ex.InnerException!.Message);
+    }
+
+    [Fact]
+    public async Task Translate_Sidecar413_HugeBody_IsNotForwarded()
+    {
+        var handler = new StubHandler { Status = HttpStatusCode.RequestEntityTooLarge, Body = new string('A', 500_000) };
+        var provider = NewProvider(handler);
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => provider.TranslateAsync("Hello.", "ta", "en"));
+        Assert.Equal(PixousSelfHostedTranslationProvider.SizeLimitMessage, ex.Message);
+        Assert.True(ex.ToString().Length < 4000);
+    }
+
+    [Fact]
+    public async Task Translate_Sidecar503ResourceLimit_IsTypedCapacityError_NoBodyForwarded()
+    {
+        var handler = new StubHandler { Status = HttpStatusCode.ServiceUnavailable,
+            Body = """{"detail":{"code":"resource_limit","message":"SECRET-REFLECTED-INPUT /srv/internal"}}""" };
+        var provider = NewProvider(handler);
+        var ex = await Assert.ThrowsAsync<TranslationCapacityException>(() => provider.TranslateAsync("Hello.", "ta", "en"));
+        Assert.False(ex.Busy);
+        Assert.DoesNotContain("SECRET-REFLECTED-INPUT", ex.ToString());
+        Assert.DoesNotContain("internal", ex.ToString());
+    }
+
+    [Fact]
+    public async Task Translate_Sidecar503Plain_StaysGenericUpstreamError_NoBodyInMessage()
+    {
+        var handler = new StubHandler { Status = HttpStatusCode.ServiceUnavailable, Body = "SECRET-REFLECTED-INPUT" };
+        var provider = NewProvider(handler);
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => provider.TranslateAsync("Hello.", "ta", "en"));
+        Assert.IsNotType<TranslationCapacityException>(ex);
+        Assert.DoesNotContain("SECRET-REFLECTED-INPUT", ex.ToString());
+    }
+
+    [Fact]
+    public async Task Translate_Sidecar429_IsTypedBusy_NoBodyForwarded()
+    {
+        var handler = new StubHandler { Status = (HttpStatusCode)429, Body = """{"detail":"SECRET-REFLECTED-INPUT"}""" };
+        var provider = NewProvider(handler);
+        var ex = await Assert.ThrowsAsync<TranslationCapacityException>(() => provider.TranslateAsync("Hello.", "ta", "en"));
+        Assert.True(ex.Busy);
+        Assert.DoesNotContain("SECRET-REFLECTED-INPUT", ex.ToString());
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData((HttpStatusCode)422)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task Translate_SidecarAuthOrServerFailure_StaysUpstreamError(HttpStatusCode status)
+    {
+        var handler = new StubHandler { Status = status, Body = """{"detail":"x"}""" };
+        var provider = NewProvider(handler);
+        await Assert.ThrowsAsync<HttpRequestException>(() => provider.TranslateAsync("Hello.", "ta", "en"));
     }
 
     [Fact]

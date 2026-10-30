@@ -45,6 +45,8 @@ public static class AiSuiteSettingsEndpoints
 
         var settings = app.MapGroup(prefix + "/settings");
         var voice = app.MapGroup(prefix + "/voice");
+        // Public voice routes spend STT/TTS provider quota: apply the same per-IP cap as /chat.
+        if (opts.RateLimit.Enabled) voice.RequireRateLimiting("pixous-ai");
 
         // ── auth ─────────────────────────────────────────────────────────
         settings.MapPost("/login", (LoginRequestDto req, SettingsTokenService tokens,
@@ -383,16 +385,32 @@ public static class AiSuiteSettingsEndpoints
 
         // ── public runtime voice (only when enabled in settings) ─────────
         voice.MapPost("/stt", async (HttpRequest req, HttpContext http, IVoiceService voiceSvc,
-            CancellationToken ct) =>
+            AiSuiteOptions o, CancellationToken ct) =>
         {
             if (!req.HasFormContentType)
                 return AiSuiteEndpoints.Fail<object>(http,
                     new ArgumentException("Expected multipart/form-data with a 'file' part."), "VALIDATION_ERROR");
-            var form = await req.ReadFormAsync(ct).ConfigureAwait(false);
+            // Public route: cap the body BEFORE it is buffered (also covers chunked uploads).
+            var maxAudio = o.Settings.MaxAudioBytes;
+            if (req.ContentLength is { } cl && cl > maxAudio + 65536)
+                return AiSuiteEndpoints.Fail<object>(http,
+                    new ArgumentException($"Audio exceeds the {(maxAudio >= 1024 * 1024 ? (maxAudio / (1024 * 1024)) + " MB" : (maxAudio / 1024) + " KB")} limit."), "VALIDATION_ERROR");
+            var maxFeature = http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+            if (maxFeature is { IsReadOnly: false }) maxFeature.MaxRequestBodySize = maxAudio + 65536;
+            IFormCollection form;
+            try { form = await req.ReadFormAsync(ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is BadHttpRequestException or InvalidDataException or IOException)
+            {
+                return AiSuiteEndpoints.Fail<object>(http,
+                    new ArgumentException($"Audio exceeds the {(maxAudio >= 1024 * 1024 ? (maxAudio / (1024 * 1024)) + " MB" : (maxAudio / 1024) + " KB")} limit or is malformed."), "VALIDATION_ERROR");
+            }
             var file = form.Files.FirstOrDefault();
             if (file is null || file.Length == 0)
                 return AiSuiteEndpoints.Fail<object>(http,
                     new ArgumentException("No audio file uploaded."), "VALIDATION_ERROR");
+            if (file.Length > maxAudio)
+                return AiSuiteEndpoints.Fail<object>(http,
+                    new ArgumentException($"Audio exceeds the {(maxAudio >= 1024 * 1024 ? (maxAudio / (1024 * 1024)) + " MB" : (maxAudio / 1024) + " KB")} limit."), "VALIDATION_ERROR");
             var language = form["language"].FirstOrDefault();
             try
             {

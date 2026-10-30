@@ -248,7 +248,8 @@ prompt). A formatted copy lives in `customization.md`.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Reply says the assistant is unavailable | Chat engine needs a key (e.g. MultiLLM with no keys saved) | Add a key in LLM APIs, or switch Chat to KnowledgeBase |
+| Reply says the assistant is unavailable, or cannot be reached | The API server is down, or the chat engine needs a key (e.g. MultiLLM with no keys saved) | Check the API server is running; add a key in LLM APIs, or switch Chat to KnowledgeBase |
+| Reply says it was cut off or interrupted | The model server dropped the stream mid-answer (for example a too-long conversation for a small local model) | Try again; if it repeats, start a fresh chat or use a model with a larger context |
 | Key shows "Invalid key" | Key revoked or mistyped | Edit it, paste a fresh key, press Test |
 | Key shows "Cooling down" | Repeated failures | Wait until the time shown, or raise another key with the up arrow |
 | Settings warns about too many attempts | 5 wrong passwords within 15 minutes | Wait 60 seconds, then use the correct password |

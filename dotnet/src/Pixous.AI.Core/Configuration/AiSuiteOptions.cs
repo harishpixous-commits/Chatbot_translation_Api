@@ -18,6 +18,13 @@ public sealed class AiSuiteOptions
     /// <summary>Active translation provider (e.g. "Echo", "AzureTranslator", "LibreTranslate").</summary>
     public string TranslationProvider { get; set; } = "Echo";
 
+    /// <summary>
+    /// Optional allowlist for the per-request translation Provider field (case-insensitive).
+    /// Default null keeps the documented precedence, so any registered translation provider can be
+    /// chosen by a caller. A list (empty = deny every client choice) restricts public callers.
+    /// </summary>
+    public List<string>? AllowedClientTranslationProviders { get; set; }
+
     public OpenAiCompatibleOptions OpenAiCompatible { get; set; } = new();
     public AzureTranslatorOptions AzureTranslator { get; set; } = new();
     public LibreTranslateOptions LibreTranslate { get; set; } = new();
@@ -83,6 +90,13 @@ public sealed class OpenAiCompatibleOptions
     public string Model { get; set; } = "gpt-4o-mini";
     public int MaxTokens { get; set; } = 512;
     public double Temperature { get; set; } = 0.7;
+    /// <summary>
+    /// Optional extra sampling fields, sent verbatim: allowlist top_p [0,1], top_k integer [0,1000],
+    /// min_p [0,1]. Default null = not sent. Set only for servers known to accept them
+    /// (local llama.cpp / vLLM / Ollama OpenAI endpoints), never for remote vendors.
+    /// Unknown, reserved or out-of-range entries throw InvalidOperationException (fail closed).
+    /// </summary>
+    public Dictionary<string, double>? ExtraSamplingParameters { get; set; }
     /// <summary>Config path holding the secret — NOT the secret itself. Default: "AiSuite:ApiKeys:Chat".</summary>
     public string ApiKeyConfigKey { get; set; } = "AiSuite:ApiKeys:Chat";
     public bool RequireApiKey { get; set; } = true;
@@ -107,6 +121,22 @@ public sealed class ChatDefaultsOptions
     public string SystemPrompt { get; set; } = "You are a helpful assistant.";
     public int MaxHistoryMessages { get; set; } = 20;
     public int MaxMessageChars { get; set; } = 4000;
+    /// <summary>
+    /// When false (default) System-role entries in a caller-supplied History are dropped, so a
+    /// public API caller cannot replace the server-side system prompt (docs/security.md keeps the
+    /// prompt server-side). Set true only for trusted host apps that deliberately send their own
+    /// system message (the provider then uses it INSTEAD of SystemPrompt).
+    /// </summary>
+    public bool AllowClientSystemMessages { get; set; }
+    /// <summary>Caller-supplied temperature must be finite and within [0, MaxClientTemperature].</summary>
+    public double MaxClientTemperature { get; set; } = 2.0;
+    /// <summary>
+    /// Optional allowlist for the per-request Provider field (case-insensitive). Default null keeps
+    /// the documented precedence (per-request, then runtime selection, then configuration) so ANY
+    /// registered provider can be chosen by a caller. Set a list (empty = deny every client choice)
+    /// to restrict which providers a public caller can route a request to.
+    /// </summary>
+    public List<string>? AllowedClientProviders { get; set; }
 }
 
 // ── Translation ──────────────────────────────────────────────────────────
@@ -132,6 +162,12 @@ public sealed class PixousEngineOptions
     public string? Endpoint { get; set; }
     /// <summary>Optional config path for the sidecar bearer token (matches PIXOUS_ENGINE_TOKEN). Null = no token.</summary>
     public string? TokenConfigKey { get; set; }
+    /// <summary>
+    /// Per-item character cap of the engine (must equal the sidecar's PIXOUS_MAX_ITEM_CHARS, default 2000).
+    /// A text longer than this is split into ordered sentence-bounded pieces and sent as several items of one
+    /// request; the pieces are re-joined in order. Texts at or below the cap are sent unchanged as one item.
+    /// </summary>
+    public int MaxItemChars { get; set; } = 2000;
 }
 
 // ── Languages ────────────────────────────────────────────────────────────

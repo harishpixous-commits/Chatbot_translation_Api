@@ -148,3 +148,27 @@ Prefer Managed Identity (`DefaultAzureCredential`) so there is no key to leak;
 rotate any key that ever touches logs, chat history, or the browser.
 Pre-commit: `appsettings.*` must contain only `ApiKeyConfigKey` pointers
 (root `.gitignore` covers secrets, `.env`, `bin/`, `obj/`, `node_modules/`).
+
+## Public chat request boundary (caller-controlled fields)
+
+- `history` System-role messages from the caller are **dropped by default**
+  (`ChatDefaults:AllowClientSystemMessages=false`) so a public caller cannot replace the
+  server-side system prompt. Trusted host apps that send their own system message set it to
+  `true`; the provider then uses that message INSTEAD of `ChatDefaults:SystemPrompt`.
+  This does not authenticate callers or limit spend.
+- `temperature` must be a finite number in `[0, ChatDefaults:MaxClientTemperature]` (default 2.0),
+  otherwise HTTP 400 `VALIDATION_ERROR`.
+- `provider` per-request selection keeps its documented precedence (per-request, then runtime
+  selection, then configuration): any registered provider can be chosen. Restrict it with
+  `ChatDefaults:AllowedClientProviders` (list; empty list denies every client choice).
+- Translation `provider` per-request selection follows the same rule: restrict it with the
+  top-level `AllowedClientTranslationProviders` (list; empty denies every client choice; default
+  null = any registered translation provider).
+- Limits on public routes: `/translation/batch` items and `/translation/detect-language` text are
+  capped at `ChatDefaults:MaxMessageChars` (default 4000) like `/translation/translate`;
+  `/voice/stt` uploads are capped by `Settings:MaxAudioBytes` (default 10 MB, rejected before the
+  body is buffered); `/voice/*` shares the per-IP rate limit with `/chat`. Failed-login tracking
+  keeps at most 50,000 callers in memory and never evicts an active lockout.
+- `OpenAiCompatible:ExtraSamplingParameters` (operator config, not caller input): optional
+  `top_p`, `top_k`, `min_p`, `seed` for local OpenAI-compatible servers; unknown/reserved/out-of-range
+  entries fail closed. Remote vendors should leave it unset.

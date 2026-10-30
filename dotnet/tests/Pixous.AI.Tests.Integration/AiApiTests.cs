@@ -87,6 +87,33 @@ public class AiApiTests : IClassFixture<AiApiTests.Factory>
         Assert.False(string.IsNullOrWhiteSpace(doc.RootElement.GetProperty("traceId").GetString()));
     }
 
+    [Theory]
+    [InlineData(99.0)]
+    [InlineData(-1.0)]
+    [InlineData(2.5)]
+    public async Task Chat_OutOfRangeTemperature_Returns400Validation(double t)
+    {
+        var res = await _client.PostAsJsonAsync("/api/ai/chat", new { message = "hi", temperature = t });
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+        Assert.False(doc.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("VALIDATION_ERROR", doc.RootElement.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Chat_InRangeTemperature_AndClientSystemHistory_StillSucceeds()
+    {
+        var res = await _client.PostAsJsonAsync("/api/ai/chat", new
+        {
+            message = "hi",
+            temperature = 0.7,
+            history = new[] { new { role = "system", content = "caller rule" }, new { role = "user", content = "earlier" } }
+        });
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+        Assert.True(doc.RootElement.GetProperty("success").GetBoolean());
+    }
+
     [Fact]
     public async Task Translate_ReturnsEnvelope()
     {

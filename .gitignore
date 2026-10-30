@@ -9,3 +9,7 @@ dist/
 # Runtime state created and mutated by the SampleApi at boot (service-key store);
 # never commit live or test-run contents.
 dotnet/samples/SampleApi/ai-suite-settings/
+
+# Python bytecode (regenerated on every sidecar run)
+__pycache__/
+*.pyc

@@ -311,6 +311,15 @@ public static class AiSuiteEndpoints
     internal static IResult Ok<T>(T data, HttpContext http) =>
         Results.Ok(new ApiResponse<T>(true, data, null, TraceId(http)));
 
+    private static IResult CapacityProblem(HttpContext http, TranslationCapacityException cex, string? trace)
+    {
+        if (cex.Busy && cex.RetryAfterSeconds is { } ra) http.Response.Headers["Retry-After"] = ra.ToString();
+        return Results.Problem(
+            title: cex.Message,
+            statusCode: cex.Busy ? 429 : 503,
+            extensions: new Dictionary<string, object?> { ["success"] = false, ["code"] = cex.Busy ? "TRANSLATION_ENGINE_BUSY" : "TRANSLATION_RESOURCE_LIMIT", ["traceId"] = trace });
+    }
+
     internal static IResult Fail<T>(HttpContext http, Exception ex, string upstreamCode)
     {
         var trace = TraceId(http);
@@ -321,6 +330,7 @@ public static class AiSuiteEndpoints
             InvalidOperationException ioex => Results.Problem(
                 title: ioex.Message, statusCode: 503,
                 extensions: new Dictionary<string, object?> { ["success"] = false, ["code"] = "PROVIDER_NOT_CONFIGURED", ["traceId"] = trace }),
+            TranslationCapacityException cex => CapacityProblem(http, cex, trace),
             HttpRequestException => Results.Problem(
                 title: "The AI service is temporarily unavailable.",
                 statusCode: 502,

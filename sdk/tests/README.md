@@ -21,3 +21,4 @@ Set CHROME_EXE to the browser binary.
   :8765): 34 checks incl. real Tamil output, privacy (no password/form/secrets
   transmission), shadow DOM, SVG, skeleton application.
 - `shot.js` - captures a full-page Tamil screenshot for pixel review.
+- `test-stranded.js` - deterministic (padfixture): blocks flagged on 2 passes are stranded; later pass is partial with empty anomaly list; clearCache re-enables.

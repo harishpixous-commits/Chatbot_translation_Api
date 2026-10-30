@@ -178,14 +178,19 @@ public sealed class OpenAiCompatibleChatProvider : IChatProvider
             messages.Add(new { role = "system", content = options!.SystemPrompt! });
         messages.AddRange(history.Select(m =>
             (object)new { role = m.Role.ToString().ToLowerInvariant(), content = m.Content }));
-        var payload = new
+        // Same fields as before. Optional local-server sampling extras are added ONLY
+        // when explicitly configured (default null => payload unchanged for remote
+        // vendors that may reject unknown fields). Invalid config fails closed.
+        var payload = new Dictionary<string, object?>
         {
-            model = options?.ModelOverride ?? _options.Model,
-            messages,
-            max_tokens = options?.MaxTokens ?? _options.MaxTokens,
-            temperature = options?.Temperature ?? _options.Temperature,
-            stream
+            ["model"] = options?.ModelOverride ?? _options.Model,
+            ["messages"] = messages,
+            ["max_tokens"] = options?.MaxTokens ?? _options.MaxTokens,
+            ["temperature"] = options?.Temperature ?? _options.Temperature,
+            ["stream"] = stream
         };
+        foreach (var (k, v) in SamplingExtras.Validate(_options.ExtraSamplingParameters))
+            payload[k] = v;
         var json = JsonSerializer.Serialize(payload, Json);
 
         Func<HttpRequestMessage> factory = () => new HttpRequestMessage(HttpMethod.Post, $"{endpoint}/chat/completions")
@@ -203,4 +208,38 @@ public sealed class OpenAiCompatibleChatProvider : IChatProvider
 
     private static string Truncate(string s, int max) =>
         s.Length <= max ? s : s[..max] + "…";
+}
+
+/// <summary>
+/// Allowlist + bounds for optional extra sampling fields. Only fields that
+/// llama.cpp / vLLM / Ollama OpenAI-compatible servers accept are allowed; anything
+/// else (including reserved request fields) is a configuration error, not silently dropped.
+/// </summary>
+internal static class SamplingExtras
+{
+    private static readonly Dictionary<string, (double Min, double Max, bool Integer)> Allowed =
+        new(StringComparer.Ordinal)
+        {
+            ["top_p"] = (0, 1, false),
+            ["top_k"] = (0, 1000, true),
+            ["min_p"] = (0, 1, false),
+            ["seed"] = (0, 2147483647, true),
+        };
+
+    public static IReadOnlyList<KeyValuePair<string, double>> Validate(IReadOnlyDictionary<string, double>? extras)
+    {
+        var result = new List<KeyValuePair<string, double>>();
+        if (extras is null) return result;
+        foreach (var (k, v) in extras)
+        {
+            if (!Allowed.TryGetValue(k, out var rule))
+                throw new InvalidOperationException(
+                    $"OpenAiCompatible:ExtraSamplingParameters key '{k}' is not allowed. Allowed: {string.Join(", ", Allowed.Keys)}.");
+            if (!double.IsFinite(v) || v < rule.Min || v > rule.Max || (rule.Integer && v != Math.Floor(v)))
+                throw new InvalidOperationException(
+                    $"OpenAiCompatible:ExtraSamplingParameters '{k}' must be a finite {(rule.Integer ? "integer" : "number")} in [{rule.Min}, {rule.Max}].");
+            result.Add(new(k, v));
+        }
+        return result;
+    }
 }

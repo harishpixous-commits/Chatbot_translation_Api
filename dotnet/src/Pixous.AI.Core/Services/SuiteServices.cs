@@ -19,7 +19,11 @@ public sealed record ChatResponseDto(
     string Provider,
     string? Model,
     string? ResponseLanguage,
-    string? SessionId);
+    string? SessionId,
+    bool? ReplyScriptAnomaly = null);
+// ReplyScriptAnomaly: true = the translated reply contained letters from an unexpected script, so the
+// translation was WITHHELD and Reply is the model's original-language text. null/false = nothing withheld
+// (null also means the provider did not check; it is not a statement that the translation is correct).
 
 public sealed record TranslateRequestDto(
     string Text,
@@ -31,7 +35,8 @@ public sealed record TranslateResponseDto(
     string TranslatedText,
     string TargetLanguage,
     string? DetectedSourceLanguage,
-    string Provider);
+    string Provider,
+    bool? ScriptAnomaly = null);
 
 public sealed record TranslateBatchRequestDto(
     List<string> Texts,
@@ -42,7 +47,8 @@ public sealed record TranslateBatchRequestDto(
 public sealed record TranslateBatchResponseDto(
     List<string> TranslatedTexts,
     string TargetLanguage,
-    string Provider);
+    string Provider,
+    List<int>? ScriptAnomalyIndexes = null);
 
 public sealed record DetectRequestDto(string Text, string? Provider = null);
 public sealed record DetectResponseDto(string Language, double Confidence, string Provider);
@@ -86,17 +92,17 @@ public sealed class ChatService : IChatService
     {
         var sw = Stopwatch.StartNew();
         var (history, targetLang) = await PrepareAsync(request, ct).ConfigureAwait(false);
-        var provider = _chats.Get(request.Provider);
+        var provider = ProviderChoice.Resolve(() => _chats.Get(request.Provider), request.Provider);
         try
         {
             var reply = await provider.ChatAsync(history,
                 new ChatRequestOptions(SystemPrompt: _options.ChatDefaults.SystemPrompt, ResponseLanguage: targetLang, Temperature: request.Temperature), ct)
                 .ConfigureAwait(false);
-            var finalText = await MaybeTranslateAsync(reply.Content, targetLang, ct).ConfigureAwait(false);
+            var (finalText, anomaly) = await MaybeTranslateAsync(reply.Content, targetLang, ct).ConfigureAwait(false);
             await PersistAsync(request.SessionId, history, finalText, ct).ConfigureAwait(false);
             _log.LogInformation("Chat ok. Provider={Provider} Lang={Lang} History={HistoryCount} ElapsedMs={Elapsed}",
                 reply.Provider, targetLang ?? "-", history.Count, sw.ElapsedMilliseconds);
-            return new ChatResponseDto(finalText, reply.Provider, reply.Model, targetLang, request.SessionId);
+            return new ChatResponseDto(finalText, reply.Provider, reply.Model, targetLang, request.SessionId, anomaly);
         }
         catch (Exception ex) when (ex is not ArgumentException)
         {
@@ -113,7 +119,7 @@ public sealed class ChatService : IChatService
         // Live translation of a stream is out of scope: stream in the model's
         // language, then translate the final text via POST translate if needed.
         var (history, targetLang) = await PrepareAsync(request, ct).ConfigureAwait(false);
-        var provider = _chats.Get(request.Provider);
+        var provider = ProviderChoice.Resolve(() => _chats.Get(request.Provider), request.Provider);
         await foreach (var chunk in provider.StreamChatAsync(history,
             new ChatRequestOptions(SystemPrompt: _options.ChatDefaults.SystemPrompt, ResponseLanguage: targetLang, Temperature: request.Temperature), ct)
             .ConfigureAwait(false))
@@ -130,6 +136,15 @@ public sealed class ChatService : IChatService
         if (request.Message.Length > _options.ChatDefaults.MaxMessageChars)
             throw new ArgumentException($"Message exceeds {_options.ChatDefaults.MaxMessageChars} characters.");
 
+        if (request.Temperature is { } temp &&
+            (!double.IsFinite(temp) || temp < 0 || temp > _options.ChatDefaults.MaxClientTemperature))
+            throw new ArgumentException(
+                $"Temperature must be a finite number between 0 and {_options.ChatDefaults.MaxClientTemperature}.");
+
+        if (request.Provider is not null && _options.ChatDefaults.AllowedClientProviders is { } allowed &&
+            !allowed.Contains(request.Provider, StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException("The requested chat provider is not allowed for client selection.");
+
         string? targetLang = request.ResponseLanguage;
         if (targetLang is not null && !_options.Languages.IsSupported(targetLang))
             throw new ArgumentException(
@@ -140,7 +155,9 @@ public sealed class ChatService : IChatService
         if (request.SessionId is not null && _store is not null)
             history.AddRange(await _store.GetAsync(request.SessionId, ct).ConfigureAwait(false));
         if (request.History is not null)
-            history.AddRange(request.History);
+            history.AddRange(_options.ChatDefaults.AllowClientSystemMessages
+                ? request.History
+                : request.History.Where(m => m.Role != ChatRole.System));
         history.Add(new ChatMessage(ChatRole.User, request.Message.Trim()));
 
         // Bound what we send upstream (cost + abuse control).
@@ -148,12 +165,13 @@ public sealed class ChatService : IChatService
         return (trimmed, targetLang);
     }
 
-    private async Task<string> MaybeTranslateAsync(string text, string? targetLang, CancellationToken ct)
+    private async Task<(string Text, bool? Anomaly)> MaybeTranslateAsync(string text, string? targetLang, CancellationToken ct)
     {
-        if (targetLang is null) return text;
+        if (targetLang is null) return (text, null);
         var translator = _translators.Get(null);
         var result = await translator.TranslateAsync(text, targetLang, null, ct).ConfigureAwait(false);
-        return result.TranslatedText;
+        // A flagged translation is withheld (original-language text returned, flag true); never shown as normal.
+        return result.ScriptAnomaly == true ? (text, true) : (result.TranslatedText, result.ScriptAnomaly);
     }
 
     private async Task PersistAsync(string? sessionId, IReadOnlyList<ChatMessage> history, string reply, CancellationToken ct)
@@ -192,13 +210,14 @@ public sealed class TranslationService : ITranslationService
     {
         ValidateText(request.Text, request.TargetLanguage);
         var sw = Stopwatch.StartNew();
-        var provider = _factory.Get(request.Provider);
+        EnsureProviderAllowed(request.Provider);
+        var provider = ProviderChoice.Resolve(() => _factory.Get(request.Provider), request.Provider);
         try
         {
             var r = await provider.TranslateAsync(request.Text, request.TargetLanguage, request.SourceLanguage, ct).ConfigureAwait(false);
             _log.LogInformation("Translate ok. Provider={Provider} To={Lang} Chars={Chars} ElapsedMs={Elapsed}",
                 r.Provider, r.TargetLanguage, request.Text.Length, sw.ElapsedMilliseconds);
-            return new TranslateResponseDto(r.TranslatedText, r.TargetLanguage, r.DetectedSourceLanguage, r.Provider);
+            return new TranslateResponseDto(r.TranslatedText, r.TargetLanguage, r.DetectedSourceLanguage, r.Provider, r.ScriptAnomaly);
         }
         catch (Exception ex) when (ex is not ArgumentException)
         {
@@ -214,28 +233,47 @@ public sealed class TranslationService : ITranslationService
         if (!_options.Languages.IsSupported(request.TargetLanguage))
             throw new ArgumentException($"Language '{request.TargetLanguage}' is not in the configured allow-list.", nameof(request));
 
-        var provider = _factory.Get(request.Provider);
+        // Same per-text cap as the single-text route: the batch route must not be a way around it.
+        var maxChars = _options.ChatDefaults.MaxMessageChars;
+        if (request.Texts.Any(t => t is not null && t.Length > maxChars))
+            throw new ArgumentException($"Each text must be at most {maxChars} characters.", nameof(request));
+
+        EnsureProviderAllowed(request.Provider);
+        var provider = ProviderChoice.Resolve(() => _factory.Get(request.Provider), request.Provider);
         var out_ = new List<string>(request.Texts.Count);
-        foreach (var t in request.Texts)
+        List<int>? anomalies = null;
+        for (var i = 0; i < request.Texts.Count; i++)
         {
+            var t = request.Texts[i];
             if (string.IsNullOrWhiteSpace(t)) { out_.Add(string.Empty); continue; }
             var r = await provider.TranslateAsync(t, request.TargetLanguage, request.SourceLanguage, ct).ConfigureAwait(false);
             out_.Add(r.TranslatedText);
+            if (r.ScriptAnomaly is not null) (anomalies ??= new List<int>()).AddRange(r.ScriptAnomaly == true ? new[] { i } : Array.Empty<int>());
         }
-        return new TranslateBatchResponseDto(out_, request.TargetLanguage, provider.ProviderName);
+        return new TranslateBatchResponseDto(out_, request.TargetLanguage, provider.ProviderName, anomalies);
     }
 
     public async Task<DetectResponseDto> DetectAsync(DetectRequestDto request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Text))
             throw new ArgumentException("Text must not be empty.", nameof(request));
-        var provider = _factory.Get(request.Provider);
+        if (request.Text.Length > _options.ChatDefaults.MaxMessageChars)
+            throw new ArgumentException($"Text exceeds {_options.ChatDefaults.MaxMessageChars} characters.");
+        EnsureProviderAllowed(request.Provider);
+        var provider = ProviderChoice.Resolve(() => _factory.Get(request.Provider), request.Provider);
         var r = await provider.DetectAsync(request.Text, ct).ConfigureAwait(false);
         return new DetectResponseDto(r.Language, r.Confidence, provider.ProviderName);
     }
 
     public Task<IReadOnlyList<SupportedLanguage>> GetLanguagesAsync(CancellationToken ct = default) =>
         _factory.Get(null).GetSupportedLanguagesAsync(ct);
+
+    private void EnsureProviderAllowed(string? requested)
+    {
+        if (requested is not null && _options.AllowedClientTranslationProviders is { } allowed &&
+            !allowed.Contains(requested, StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException("The requested translation provider is not allowed for client selection.");
+    }
 
     private void ValidateText(string text, string targetLanguage)
     {
@@ -247,5 +285,23 @@ public sealed class TranslationService : ITranslationService
             throw new ArgumentException(
                 $"Language '{targetLanguage}' is not in the configured allow-list: {string.Join(", ", _options.Languages.Supported)}.",
                 nameof(targetLanguage));
+    }
+}
+
+
+/// <summary>
+/// A caller-supplied provider name that is not registered is a client error (HTTP 400), and the
+/// response must not list registered providers or config paths (operators see those in logs).
+/// Server-side defaults (no caller choice) keep the operator-facing configuration error.
+/// </summary>
+internal static class ProviderChoice
+{
+    public static T Resolve<T>(Func<T> get, string? requested)
+    {
+        try { return get(); }
+        catch (InvalidOperationException) when (requested is not null)
+        {
+            throw new ArgumentException("The requested provider is not available.");
+        }
     }
 }

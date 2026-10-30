@@ -20,7 +20,14 @@ bootstrapApplication(AppRoot, {
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideHttpClient(),
-    { provide: AI_SUITE_CONFIG, useValue: { apiBaseUrl: '' } },
+    {
+      provide: AI_SUITE_CONFIG,
+      useValue: {
+        apiBaseUrl: new URLSearchParams(location.search).has('dead')
+          ? 'http://127.0.0.1:8991' // nothing listens here: network-failure scenario
+          : '',
+      },
+    },
   ],
 }).then(() => { (window as any).__booted = true; })
  .catch((e) => { (window as any).__bootError = String(e && (e.stack || e)); console.error(e); });

@@ -208,16 +208,21 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ success: true, data: { translatedTexts: out, targetLanguage, provider: "MangleFixture" }, error: null, traceId: "t" }));
           return;
         }
+        // Propagate a browser abort to the sidecar (its disconnect polling then cancels the job).
+        const ac = new AbortController();
+        res.on("close", () => { if (!res.writableEnded) ac.abort(); });
         const r = await fetch(`${SIDECAR}/translate`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ source: sourceLanguage, target: targetLanguage, items: texts }),
+          signal: ac.signal,
         });
         const data = await r.json();
+        const q = data.quality && data.quality.checked === true && Array.isArray(data.quality.script_anomaly_items) ? data.quality.script_anomaly_items : undefined;
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({
           success: true,
-          data: { translatedTexts: data.translations, targetLanguage, provider: "PixousSelfHosted" },
+          data: { translatedTexts: data.translations, targetLanguage, provider: "PixousSelfHosted", scriptAnomalyIndexes: q },
           error: null, traceId: "t",
         }));
       } catch (e) {

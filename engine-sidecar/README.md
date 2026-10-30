@@ -82,7 +82,7 @@ hubs; absence of evidence, not proof none exists). Pivot responses carry
 ## Run
 ```bash
 ./setup.sh            # installs deps + downloads pinned model revisions
-./run.sh              # uvicorn on 127.0.0.1:8765
+./run.sh              # uvicorn on 127.0.0.1:8765 (SIGTERM waits at most PIXOUS_SHUTDOWN_SECONDS=10 for an in-flight request; without --timeout-graceful-shutdown a running dense job delayed exit past 60 s on the test host; the aborted client sees 500)
 curl -X POST http://127.0.0.1:8765/translate -H 'content-type: application/json' \
   -d '{"source":"en","target":"ta","items":["Welcome to our website."]}'
 ```
@@ -99,3 +99,31 @@ service. Configure:
 `TokenConfigKey` is a pointer to config/env/KeyVault, never the token itself.
 Detection is a script-level heuristic over the six priority scripts; pass
 `sourceLanguage` explicitly for anything important.
+
+## Resource guards and long input (CANDIDATE, v14i: not an accepted default)
+
+Long items are split by the real tokenizer count (not characters) and translated in order;
+nothing is intentionally passed through untranslated. The model can still drop or garble content
+inside a chunk, and CT2 int8 output on the tested 2 vCPU / 2 GB host was NOT reproducible run to
+run (same input, different output in about 1 of 3-4 fresh processes). Do not treat a single run as
+a quality measurement.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `PIXOUS_WORKER` | `1` | Run translation in an owned child process (hard time kill, RSS watchdog). `0` = in-process: **known unsafe**, no hard limit, can be OOM-killed; not a recommended workaround. |
+| `PIXOUS_HARD_SECONDS` | `120` | Hard kill of the worker for one request. Returns 503 `resource_limit`; the next request restarts the worker. |
+| `PIXOUS_MAX_RSS_MB` | `1400` | Worker memory watchdog (polling, not an OS limit). Returns 503 `resource_limit`. Do not raise it on a 2 GB host. |
+| `PIXOUS_MAX_QUEUE` | `8` | Requests allowed to WAIT behind the one running request. Over that: HTTP 429 + `Retry-After`. Fairness between waiters is not guaranteed. |
+| `PIXOUS_TOKEN_BUDGET` | `80` | Max tokenizer pieces (including 3 specials) per chunk. Tuned on small samples only. |
+| `PIXOUS_CHUNK_GROUP` | `4` | Chunks per model call (was 16). Measured on the test host: a dense 2000-char input of short words peaked above 1.7 GB at 16 and 8 (stopped by my watchdog) and 1.1 GB at 4; normal text peaked 850-900 MB at 4 vs 960-1130 MB at 16, with 0.5-1.3 s difference in time (2-3 samples each, not a benchmark). Dense input still takes 40+ s. |
+
+Known limit: a valid but token-dense 2000-character item can be refused with 503 `resource_limit`.
+The .NET API maps sidecar 429 to HTTP 429 `TRANSLATION_ENGINE_BUSY` (with `Retry-After`) and a
+`resource_limit` 503 to HTTP 503 `TRANSLATION_RESOURCE_LIMIT`; other sidecar failures stay a generic 502.
+Upstream response bodies are never forwarded or logged.
+
+## Response `quality` and `/health` limits (CANDIDATE)
+
+- `POST /translate` responses carry `quality: {checked, script_anomaly_items[]}`. `checked` is false for target languages without a known script (unverified, not clean). A flagged item means letters of an unexpected script appear in that output (observed: stray Ol Chiki tokens inside Tamil output from the int8 model); the text is returned unedited. An unflagged item is not evidence of a correct translation.
+- `GET /health` lists `limits: {max_items, max_item_chars, max_total_chars}` (the effective `PIXOUS_MAX_*` values). The .NET provider reads them the first time it splits a long text and reports a precise configuration error if `PixousEngine:MaxItemChars` is above `max_item_chars`.
+- Known: the engine is not deterministic between identical requests in one process (int8, observed on this host); see docs/v2/quality-known-issues.md.

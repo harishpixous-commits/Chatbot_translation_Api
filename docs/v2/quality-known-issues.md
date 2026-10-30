@@ -7,10 +7,43 @@ all placeholder markers exactly. Measured 2026-10-27 against the local sidecar:
 
 - Identical sentence, 10 different randomized marker prefixes: 6/10 fully
   translated, 4/10 kept "Nested"/"inline" in English (markers intact).
-- Batch composition ruled out: same sentence solo vs in mixed batches returns
-  byte-identical output.
+- Batch composition: an earlier check reported byte-identical output solo vs in
+  mixed batches. A later local measurement (2026-10-28, Linux sandbox, one engine
+  process, kn target, 60 fixed items sent as batches of 1/3/10/30/60) found
+  output text differing from the single-item output for 5, 11, 2 and 2 of 60
+  items respectively. Output can therefore depend on batch composition. That
+  sample did not link it to marker failures (all 60 passed the marker check at
+  every batch size), so it is not shown to cause them. Not measured: ta/ml, other
+  batch compositions, Windows, CPU variants.
 - Deterministic for a given input; variance comes from the per-load random
   marker string shifting subword tokenization.
+
+Update 2026-10-28 (local, Linux sandbox, self-hosted CT2 sidecar; fixtures are
+synthetic and are not production prevalence):
+- Unsplit real-engine SDK test (sdk/tests/test.js, 34 checks) is intermittent:
+  roughly 2 full passes in 8+ attempts, remaining runs timed out waiting for
+  state "done" (the last attempt in the 5-run series: 28 checks then a 60 s
+  timeout). The 5-consecutive-full-pass criterion is 0 of 5 and NOT met.
+  Splitting the test into sections that pass does not count as stability.
+- Captured causes (observed, not proven general): the SDK rejected engine output
+  whose marker tag text had been rewritten (e.g. part of a tag name replaced by
+  native-script text), dropped markers, text before the first marker, or
+  repeated single syllables. Rejection is the intended fail-closed behavior;
+  originals were kept and the page state became "partial". A block rejected on
+  the first pass is not cached, so a repeat switch refetches it (design-consistent).
+- Marker damage rate on the self-hosted engine in these fixtures was not
+  negligible: 3-7 of 60 per language in a synthetic nested-tag fixture, and
+  22 of 120 in a batched kn fixture on the original engine. A scratch candidate
+  that swapped tags for model-native placeholders before translating ended the
+  same batched kn items at 2 of 120 after all its stages, but that candidate is
+  not integrated, is not proven safe for other callers (ordering/nesting/collision
+  limits), and the two numbers come from different engine stages, so the
+  difference is observed, not an isolated causal result or an acceptance result.
+  Model-native placeholders were also seen mutated (a digit replaced by a
+  native-script character).
+- Not measured: Windows runtime, ta/ml/kn native-speaker quality, hi/te in these
+  fixtures, behavior across engine restarts (results differ run to run after a
+  restart).
 
 Status: quality-evaluation case for the native-speaker QA gate (all six
 languages). SDK behavior in every observed case was correct (markers validated,
@@ -53,8 +86,12 @@ language. Regression: switch-to-source-mid-flight case in the race suite.
 100 sentences x 5 Indic languages, three placeholder styles: marker survival
 83-87%, source-word echo 0-1%. Marker drops are caused by word REORDERING in
 translation (SOV targets): placeholders attached to moved/merged words are
-dropped by the model. Placeholder style does not fix reorder-driven loss, so
-engine-side shielding is NOT justified by the data. The SDK fails closed on
+dropped by the model. Placeholder style did not fix reorder-driven loss in that
+measurement, which was taken as a reason not to add engine-side shielding. Later
+local measurements (see the 2026-10-28 update in section 1) are mixed on that:
+marker tag text was also seen rewritten by the engine, and a scratch tag-protect
+candidate lowered the observed damage on one fixture. The conclusion is therefore
+open, not settled either way. The SDK fails closed on
 every such case (original block preserved + state="partial"), so the user
 impact is an untranslated block, never a corrupted page. Real page skeletons
 carry 1-3 markers, not the 4-per-sentence worst case measured here.
@@ -63,7 +100,7 @@ carry 1-3 markers, not the 4-per-sentence worst case measured here.
 
 8. Bug #6 - stale-check rejected the SDK's own prior-language translations on language-to-language switches (old skeleton markers no longer in DOM). Fixed with slot-level original-or-ours staleness (skeleton/text/merged). Pinned by race/regression suites.
 9. Echo retention: for ta/hi/te/ml/kn targets, translations whose Latin-script fraction exceeds echoLatinThreshold (default 0.6) are rejected as untranslated echoes; block preserved as original + partial status. Fail-closed quality case, not silent success.
-10. markerRetry (opt-in, default false): one bounded batched re-fetch per pass with a fresh randomized marker prefix (max markerRetryMax=10 skeletons/pass). Measured: 5/6 fresh prefixes recover a loss; representative 1-3 marker blocks are 96% (48/50) intact, 2% echo. Root cause: SOV reordering drops placeholders on moved words; prefix-dependent.
+10. markerRetry (default ON in sdk/pixous-i18n.js since 2026-10-27; this line previously said opt-in/default false, which did not match the code; set markerRetry:false to opt out): one bounded batched re-fetch per pass with a fresh randomized marker prefix (max markerRetryMax=10 skeletons/pass). Measured: 5/6 fresh prefixes recover a loss; representative 1-3 marker blocks are 96% (48/50) intact, 2% echo. Root cause: SOV reordering drops placeholders on moved words; prefix-dependent.
 11. markFactory config seam for deterministic tests.
 
 12. Echo guard extended to plain text/attribute/merged blocks (previously skeleton-only). Exemptions: URLs, emails, and cfg.echoAllowlist entries are stripped before the Latin fraction. Classification: HEURISTIC partial guard, not semantic quality assurance - English-heavy legitimate UI needs the allowlist. Plain-text echo failures are not retried (no prefix dependence); skeleton failures get the one bounded markerRetry.
@@ -105,3 +142,10 @@ carry 1-3 markers, not the 4-per-sentence worst case measured here.
 29. Angular/npm portability fixed and VERIFIED through real npm ci (2026-10-27): the committed package-lock.json could never satisfy npm ci anywhere - node_modules/@angular, tslib and @ngx-translate were symlinks into /tmp/ngc, the lockfile recorded them as link:true entries, and its metadata disagreed with itself (compiler 18.2.14 vs compiler-cli 18.2.13's exact peer). Fix: all @angular/* devDependencies pinned to the exact on-disk set (18.2.13), symlinks replaced with real installs, lockfile regenerated from a clean resolve (272 packages, zero link entries), tests/browser gained its own committed package-lock.json (playwright-core). VERIFIED: npm ci at project level + npm ci in tests/browser, then the full widget harness against the fresh install - 8/8 PASS. CI draft updated to npm ci in both places. Residual NOT verified: Git Bash specifics on windows-latest (sh run.sh, .bin/ngc shim, Windows CHROME_EXE path) are statically sound but only executed on Linux here; first CI run is the Windows check.
 
 30. Production hardening implemented + tested (2026-10-27, was doc-only): (a) built-in "PixousApiKey" authentication scheme - X-API-Key header against AiSuite:Security:ApiKeys, constant-time compare, missing and wrong keys take the identical fixed-401 path with an empty body, key material never logged or echoed; (b) fail-closed startup: RequireAuthorization=true with no registered scheme (neither built-in keys nor host JWT/OIDC) throws InvalidOperationException at MapAiSuiteEndpoints instead of failing per-request at runtime; (c) middleware wired from MapAiSuiteEndpoints in framework order (CORS -> UseAuthentication/UseAuthorization -> UseRateLimiter) so the 3-line host is actually protected - and the sample's duplicate UseRateLimiter call is removed (double-wiring counted every request twice); (d) exact-origin CORS policy from AiSuite:Cors:AllowedOrigins, '*' rejected by options validation, credentials off by default; (e) sidecar bearer-token compare is now constant-time (hmac.compare_digest). PINNED: integration 44/44 incl. 8 new tests (401 no-key/wrong-key with no hint body, 200 with key and no echo, startup fail-closed, 429+Retry-After after PermitLimit, preflight allowed-origin exact header / disallowed-origin no header, cross-origin POST header) + unit 156/156 (net8+net10) + sidecar 25/25 incl. token-auth tests; also manually verified live (401/401/200 against the running sample). REMAINS OWNER-SIDE by design: OIDC provider choice/signup, TLS termination, Key Vault wiring, deployment. Sidecar rate limiting intentionally absent: translation is serialized through one lock with hard byte bounds (items/chars/total), so one caller's worst case is queueing, not exhaustion.
+
+## Engine output varies between identical requests (observed 2026-10-29, self-hosted int8 sidecar)
+
+- Identical en->ta requests in ONE sidecar process returned different outputs: 12 of 540 item translations (7 of 60 requests) differed from the majority at `PIXOUS_CHUNK_GROUP=4`, 4 of 369 (4 of 41) at group 1. Chunk grouping does not remove it; the cause is not established. Fresh-process rates seen earlier (int8 default about 1 in 10, one small sample) are not rates either.
+- Observed bad outputs: dropped sentences in long text (numbers 4, 11, 18, 25 missing from one 3371-char run; 68/69 in another), repeated-punctuation garble, and stray Ol Chiki tokens inside Tamil text. The script check flags only the wrong-script case. Dropped content is NOT detected by any check.
+- A float32 trial showed 0 of 297 differing in one process; it is a lead only (about 1265 MB RSS, over the 1400 MB guard for pivot pairs), not adopted, no quality claim.
+- Consequence for consumers: a 200 response is not a translation-quality or completeness guarantee. The SDK real-engine browser suite (`sdk/tests/test.js`) can end in "partial" instead of "done" when a flagged item is kept in the original language; that is the designed behaviour, so the test is not stable-green on the real model.

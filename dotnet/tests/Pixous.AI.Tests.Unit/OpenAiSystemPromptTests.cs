@@ -98,4 +98,69 @@ public class OpenAiSystemPromptTests
         Assert.Equal("system", messages[0].GetProperty("role").GetString());
         Assert.Equal("existing system rule", messages[0].GetProperty("content").GetString());
     }
+
+    private static OpenAiCompatibleChatProvider WithExtras(CaptureHandler h, Dictionary<string, double>? extras) =>
+        new(new HttpClient(h),
+            new OpenAiCompatibleOptions
+            {
+                Endpoint = "http://localhost", RequireApiKey = false, Temperature = 0.7,
+                ExtraSamplingParameters = extras
+            },
+            new ResilienceOptions(), apiKey: null);
+
+    private static readonly ChatMessage[] Hi = { new(ChatRole.User, "hi") };
+
+    [Fact]
+    public async Task Chat_DefaultPayload_HasNoExtraSamplingFields()
+    {
+        var handler = new CaptureHandler();
+        await WithExtras(handler, null).ChatAsync(Hi);
+        using var doc = JsonDocument.Parse(handler.LastBody!);
+        foreach (var k in new[] { "top_p", "top_k", "min_p" })
+            Assert.False(doc.RootElement.TryGetProperty(k, out _), k);
+        Assert.Equal(0.7, doc.RootElement.GetProperty("temperature").GetDouble());
+        Assert.Equal(512, doc.RootElement.GetProperty("max_tokens").GetInt32());
+    }
+
+    [Fact]
+    public async Task Chat_ConfiguredExtraSampling_IsSentUnchangedAndCoreFieldsIntact()
+    {
+        var handler = new CaptureHandler();
+        await WithExtras(handler, new() { ["top_p"] = 0.8, ["top_k"] = 20, ["min_p"] = 0, ["seed"] = 1234 }).ChatAsync(Hi);
+        using var doc = JsonDocument.Parse(handler.LastBody!);
+        var r = doc.RootElement;
+        Assert.Equal(0.8, r.GetProperty("top_p").GetDouble());
+        Assert.Equal(20, r.GetProperty("top_k").GetDouble());
+        Assert.Equal(0, r.GetProperty("min_p").GetDouble());
+        Assert.Equal(1234, r.GetProperty("seed").GetInt32());
+        Assert.Equal(0.7, r.GetProperty("temperature").GetDouble());
+        Assert.Equal(512, r.GetProperty("max_tokens").GetInt32());
+        Assert.Equal("user", r.GetProperty("messages")[0].GetProperty("role").GetString());
+    }
+
+    [Theory]
+    [InlineData("temperature", 9)]
+    [InlineData("max_tokens", 1)]
+    [InlineData("model", 1)]
+    [InlineData("stream", 1)]
+    [InlineData("messages", 1)]
+    [InlineData("unknown_field", 1)]
+    [InlineData("top_p", 1.5)]
+    [InlineData("top_p", -0.1)]
+    [InlineData("top_p", double.NaN)]
+    [InlineData("top_p", double.PositiveInfinity)]
+    [InlineData("top_k", 20.5)]
+    [InlineData("top_k", -1)]
+    [InlineData("top_k", 100000)]
+    [InlineData("min_p", 2)]
+    [InlineData("seed", -1)]
+    [InlineData("seed", 1.5)]
+    [InlineData("seed", 3000000000)]
+    public async Task Chat_InvalidExtraSampling_FailsClosed_NoHttpSent(string key, double value)
+    {
+        var handler = new CaptureHandler();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            WithExtras(handler, new() { [key] = value }).ChatAsync(Hi));
+        Assert.Null(handler.LastBody);
+    }
 }

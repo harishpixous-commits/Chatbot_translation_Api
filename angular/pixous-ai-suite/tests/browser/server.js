@@ -32,8 +32,24 @@ function sendSSE(res, frames) {
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
   if (u.pathname === "/api/ai/chat" && req.method === "POST") {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ success: true, data: { reply: "STUB-REPLY vanakkam-ok" }, error: null, traceId: "t" }));
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      let tooLong = false, withheld = false;
+      try { const m = JSON.parse(body).message || ""; tooLong = /too long/.test(m); withheld = /withheld case/.test(m); } catch { /* not our scenario */ }
+      if (withheld) {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ success: true, data: { reply: "ORIGINAL-LANGUAGE-REPLY", replyScriptAnomaly: true }, error: null, traceId: "t" }));
+        return;
+      }
+      if (tooLong) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ success: false, data: null, error: { code: "VALIDATION_ERROR", message: "Text exceeds 4000 characters." }, traceId: "t" }));
+      } else {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ success: true, data: { reply: "STUB-REPLY vanakkam-ok" }, error: null, traceId: "t" }));
+      }
+    });
     return;
   }
   if (u.pathname === "/api/ai/chat/stream" && req.method === "POST") {

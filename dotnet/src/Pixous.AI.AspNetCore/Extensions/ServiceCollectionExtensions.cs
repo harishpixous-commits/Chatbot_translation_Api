@@ -133,7 +133,7 @@ public static class ServiceCollectionExtensions
                 sp.GetService<ILogger<SettingsStore>>(),
                 protector: protector, blockShippedDefaultPassword: blockDefault);
         });
-        services.AddSingleton<SettingsTokenService>();
+        services.AddSingleton(_ => new SettingsTokenService(maxTrackedCallers: options.Settings.MaxTrackedLoginCallers));
 
         // Project service keys for the shared /api/ai/v1 surface: same store
         // directory as settings, separate file (service-keys.json, 0600),

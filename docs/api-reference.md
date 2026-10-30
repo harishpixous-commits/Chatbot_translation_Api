@@ -34,12 +34,12 @@ Same body. Frames: `data: <delta>` … `data: [DONE]`. Errors mid-stream:
 ## POST /translation/translate
 
 `{ text, targetLanguage, sourceLanguage?, provider? }` →
-`data: { translatedText, targetLanguage, detectedSourceLanguage, provider }`.
+`data: { translatedText, targetLanguage, detectedSourceLanguage, provider }`, plus `scriptAnomaly` (CANDIDATE, self-hosted engine only): `true` = the output contains letters of an unexpected script (output is returned UNEDITED), `false` = checked and none found, absent/`null` = not checked. `false` is not a quality or correctness statement. See docs/configuration.md (script check coverage).
 
 ## POST /translation/batch — 1–100 texts
 
 `{ texts[], targetLanguage, sourceLanguage?, provider? }` →
-`data: { translatedTexts[], targetLanguage, provider }`.
+`data: { translatedTexts[], targetLanguage, provider }`, plus `scriptAnomalyIndexes[]` (CANDIDATE, self-hosted engine only; indexes of texts flagged as above, omitted when nothing was checked). Texts are translated one sidecar request per non-empty text; a whitespace-only text returns an empty string.
 
 ## POST /translation/detect-language
 

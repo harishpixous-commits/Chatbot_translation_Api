@@ -41,9 +41,15 @@ The widget streams the reply token by token over SSE (`POST /api/ai/chat/stream`
   arrives as one bubble, sent exactly once.
 - Any other failure (401/403/429, 5xx, timeout, network drop, or a reply that
   had already started) does NOT re-send the request: the request may have been
-  processed and billed, and re-sending could double-charge. The widget shows
-  "Sorry - the assistant is unavailable right now." instead. If partial text
-  had already streamed, it stays visible with a "cut off" notice after it.
+  processed and billed, and re-sending could double-charge. The widget shows a
+  message chosen by the failure (one shared `chatErrorText` table): a rejected
+  message shows the server's own validation text (header stays Online, since
+  the API answered); a stream the model server dropped mid-answer shows "cut
+  off" (partial text stays visible); an unreachable API, an unreachable model
+  server, a missing provider setup and a server error each get their own plain
+  sentence; only an unclassified failure falls back to "the assistant is
+  unavailable right now". The header shows nothing until an interaction proves
+  the state, then "Online" or "Unavailable" (always a text label).
 - A 4xx is the vendor's answer about the request, not proof of billing state;
   the provider dashboard is the final word on what was charged.
 - `responseLanguage` is passed to the chat provider in both modes, so a real

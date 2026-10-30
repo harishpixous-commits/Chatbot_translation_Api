@@ -44,6 +44,15 @@ public sealed class SettingsOptions
     /// <summary>Max upload size for knowledge-base documents.</summary>
     public long MaxUploadBytes { get; set; } = 20 * 1024 * 1024;
 
+    /// <summary>Largest audio upload accepted by the public /voice/stt route (default 10 MB).</summary>
+    public long MaxAudioBytes { get; set; } = 10 * 1024 * 1024;
+
+    /// <summary>
+    /// Hard cap on remembered failed-login callers (memory bound under many-source abuse).
+    /// Active lockouts are never evicted. Default 50,000 (about 8 MB measured).
+    /// </summary>
+    public int MaxTrackedLoginCallers { get; set; } = 50_000;
+
     public int MinPasswordLength { get; set; } = 8;
 
     public IEnumerable<string> Validate()
@@ -58,6 +67,10 @@ public sealed class SettingsOptions
             yield return "Settings:ExhaustedCooldownSeconds must be >= 1.";
         if (MinPasswordLength < 4)
             yield return "Settings:MinPasswordLength must be >= 4.";
+        if (MaxTrackedLoginCallers < 16)
+            yield return "Settings:MaxTrackedLoginCallers must be >= 16.";
+        if (MaxAudioBytes < 1024)
+            yield return "Settings:MaxAudioBytes must be >= 1 KB.";
         if (MaxUploadBytes < 1024)
             yield return "Settings:MaxUploadBytes must be >= 1 KB.";
     }
